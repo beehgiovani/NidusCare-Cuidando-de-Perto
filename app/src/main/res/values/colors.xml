@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="md_theme_primary">#1A5276</color>
+    <color name="md_theme_onPrimary">#FFFFFF</color>
+    <color name="md_theme_primaryContainer">#A6D2E7</color>
+    <color name="md_theme_onPrimaryContainer">#001C31</color>
+
+    <color name="md_theme_secondary">#336B87</color>
+    <color name="md_theme_onSecondary">#FFFFFF</color>
+    <color name="md_theme_secondaryContainer">#C7E8FF</color>
+    <color name="md_theme_onSecondaryContainer">#001F2A</color>
+
+    <color name="md_theme_tertiary">#36A18B</color> <color name="md_theme_onTertiary">#FFFFFF</color>
+    <color name="md_theme_tertiaryContainer">#67DAC8</color>
+    <color name="md_theme_onTertiaryContainer">#00211D</color>
+
+    <color name="md_theme_error">#BA1A1A</color>
+    <color name="md_theme_onError">#FFFFFF</color>
+    <color name="md_theme_errorContainer">#FFDAD6</color>
+    <color name="md_theme_onErrorContainer">#410002</color>
+
+    <color name="md_theme_background">#EFF7FC</color>
+    <color name="md_theme_onBackground">#191C1E</color>
+    <color name="md_theme_surface">#EFF7FC</color>
+    <color name="md_theme_onSurface">#191C1E</color>
+    <color name="md_theme_surfaceVariant">#DDE4E8</color>
+    <color name="md_theme_onSurfaceVariant">#42474A</color>
+    <color name="md_theme_outline">#72787C</color>
+    <color name="md_theme_inverseOnSurface">#F0F1F3</color>
+    <color name="md_theme_inverseSurface">#2E3133</color>
+    <color name="md_theme_inversePrimary">#8EC8F6</color>
+    <color name="md_theme_surfaceTint">#1A5276</color>
+    <color name="md_theme_surfaceTintColor">#1A5276</color>
+
+    <color name="md_theme_primary_dark">#8EC8F6</color>
+    <color name="md_theme_onPrimary_dark">#003254</color>
+    <color name="md_theme_primaryContainer_dark">#004978</color>
+    <color name="md_theme_onPrimaryContainer_dark">#D1E4FF</color>
+
+    <color name="md_theme_secondary_dark">#A7CCDE</color>
+    <color name="md_theme_onSecondary_dark">#003544</color>
+    <color name="md_theme_secondaryContainer_dark">#1B4C5D</color>
+    <color name="md_theme_onSecondaryContainer_dark">#C7E8FF</color>
+
+    <color name="md_theme_tertiary_dark">#4CDABE</color> <color name="md_theme_onTertiary_dark">#003830</color>
+    <color name="md_theme_tertiaryContainer_dark">#005146</color>
+    <color name="md_theme_onTertiaryContainer_dark">#67DAC8</color>
+
+    <color name="md_theme_error_dark">#FFB4AB</color>
+    <color name="md_theme_onError_dark">#690005</color>
+    <color name="md_theme_errorContainer_dark">#93000A</color>
+    <color name="md_theme_onErrorContainer_dark">#FFDAD6</color>
+
+    <color name="md_theme_background_dark">#121212</color>
+    <color name="md_theme_onBackground_dark">#E3E3E3</color>
+    <color name="md_theme_surface_dark">#1E1E1E</color>
+    <color name="md_theme_onSurface_dark">#E3E3E3</color>
+    <color name="md_theme_surfaceVariant_dark">#42474A</color>
+    <color name="md_theme_onSurfaceVariant_dark">#C1C7CC</color>
+
+
+    <color name="premium_gold">#FFC107</color>
+    <color name="light_gray_subtle">#F0F4F7</color>
+    <color name="dark_blue_subtle">#1A5276</color> <color name="deep_blue">#0A2E42</color> <color name="sky_blue">#A6D2E7</color> <color name="shimmer_placeholder">#DDDDDD</color>
+    <color name="splash_background_color">#FFFFFF</color>
+
+    <color name="status_success_green">#36A18B</color> <color name="status_warning_orange">#F97D09</color>
+
+    <color name="colorPrimary">@color/md_theme_primary</color>
+    <color name="colorPrimaryDark">#002E4B</color> <color name="colorPrimaryLight">@color/md_theme_primaryContainer</color>
+    <color name="colorAccent">@color/md_theme_secondary</color>
+    <color name="colorBackground">@color/md_theme_background</color>
+    <color name="colorSurface">@color/md_theme_surface</color>
+    <color name="colorOnPrimary">@color/md_theme_onPrimary</color>
+    <color name="colorOnSecondary">@color/md_theme_onSecondary</color>
+    <color name="colorOnBackground">@color/md_theme_onBackground</color>
+    <color name="colorOnSurface">@color/md_theme_onSurface</color>
+    <color name="colorSuccess">#6BCF8E</color> <color name="colorWarning">#FFCA28</color>
+    <color name="colorError">#E53935</color>
+    <color name="gradiente">#6BCF8E</color> <color name="onboarding_background">#E3F2FD</color> <color name="Green_aviso">#36A18B</color> <color name="primary_color">@color/md_theme_primary</color>
+    <color name="primary_dark">@color/colorPrimaryDark</color>
+    <color name="primary_light">@color/md_theme_primaryContainer</color>
+    <color name="primary_variant">#003C60</color> <color name="soft_blue">#C7E8FF</color>
+    <color name="soft_blue_light">#EFF7FC</color>
+    <color name="soft_blue_dark">#004978</color>
+    <color name="secondary_color">@color/md_theme_secondary</color>
+    <color name="secondary_dark">#001F2A</color>
+    <color name="secondary_light">@color/md_theme_secondaryContainer</color>
+    <color name="light_blue">#A7CCDE</color>
+    <color name="light_blue_soft">#C7E8FF</color>
+    <color name="light_blue_pale">#EFF7FC</color>
+    <color name="accent_color">@color/md_theme_tertiary</color> <color name="accent_dark">#00443D</color> <color name="accent_light">#9ADCD4</color> <color name="electric_blue">#448AFF</color> <color name="electric_blue_light">#83A9FF</color>
+    <color name="primary_text">@color/md_theme_onBackground</color>
+    <color name="secondary_text">@color/md_theme_onSurfaceVariant</color>
+    <color name="hint_text">@color/md_theme_outline</color>
+    <color name="disabled_text">@color/md_theme_onSurfaceVariant</color>
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="text_on_primary">#FFFFFF</color>
+    <color name="text_on_accent">#FFFFFF</color>
+    <color name="background_light">@color/md_theme_background</color>
+    <color name="background_soft">#EBF2F6</color>
+    <color name="surface_light">@color/md_theme_surface</color>
+    <color name="surface_elevated">#F8FAFE</color>
+    <color name="background_blue_tint">#EBF2F6</color>
+    <color name="card_background">#FFFFFF</color>
+    <color name="dialog_background">#FFFFFF</color>
+    <color name="success_green">#6BCF8E</color>
+    <color name="success_light">#EAFBF4</color>
+    <color name="success_on_surface">#2D8C7D</color>
+    <color name="warning_orange">#FF9800</color>
+    <color name="warning_light">#FFF3E0</color>
+    <color name="warning_on_surface">#E65100</color>
+    <color name="error_red">#D32F2F</color>
+    <color name="error_light">#FFEBEE</color>
+    <color name="error_on_surface">#B71C1C</color>
+    <color name="info_blue">#1A5276</color>
+    <color name="info_light">#E3F2FD</color>
+    <color name="info_on_surface">#004978</color>
+    <color name="medication_taken">#36A18B</color>
+    <color name="medication_missed">#FF5722</color>
+    <color name="medication_pending">#FF9800</color>
+    <color name="medication_paused">#9E9E9E</color>
+    <color name="card_shadow">#1A1A5276</color>
+    <color name="elevation_shadow">#0A000000</color>
+    <color name="divider">#D0D0D0</color>
+    <color name="border_light">#E0E0E0</color>
+    <color name="border_medium">#B0B0B0</color>
+    <color name="shimmer_base">#F0F0F0</color>
+    <color name="shimmer_highlight">#E0E0E0</color>
+    <color name="ripple_color">#201A5276</color>
+    <color name="pressed_state">#101A5276</color>
+    <color name="focused_state">#201A5276</color>
+    <color name="hover_state">#101A5276</color>
+    <color name="semi_transparent_white">#80FFFFFF</color>
+    <color name="semi_transparent_black">#80000000</color>
+    <color name="overlay_dark">#80000000</color>
+    <color name="overlay_light">#60FFFFFF</color>
+    <color name="gradient_start">#1A5276</color>
+    <color name="gradient_end">#336B87</color>
+    <color name="gradient_secondary_start">#36A18B</color>
+    <color name="gradient_secondary_end">#6BCF8E</color>
+    <color name="gradient_soft_start">#EBF2F6</color>
+    <color name="gradient_soft_end">#A6D2E7</color>
+    <color name="gradient_card_start">#FFFFFF</color>
+    <color name="gradient_card_end">#F3FAFF</color>
+    <color name="urgency_critical">#D32F2F</color>
+    <color name="urgency_high">#F57C00</color>
+    <color name="urgency_medium">#1A5276</color>
+    <color name="urgency_low">#36A18B</color>
+    <color name="medication_oral">#1A5276</color>
+    <color name="medication_injection">#6A1B9A</color>
+    <color name="medication_topical">#36A18B</color>
+    <color name="medication_other">#607D8B</color>
+    <color name="dose_morning">#FFB300</color>
+    <color name="dose_afternoon">#FF8F00</color>
+    <color name="dose_evening">#5C6BC0</color>
+    <color name="dose_night">#3949AB</color>
+
+</resources>

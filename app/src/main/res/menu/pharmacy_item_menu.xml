@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/action_call_pharmacy"
+        android:title="Ligar para a Farmácia" />
+    <item
+        android:id="@+id/action_select_pharmacy"
+        android:title="Selecionar para Comprar" />
+</menu>

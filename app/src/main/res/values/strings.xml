@@ -1,0 +1,152 @@
+<resources>
+    <string name="app_name">NidusCare</string>
+    <string name="default_web_client_id" translatable="false">355114439909-9jq899nv93pdsjr2hav6f8gq2okushon.apps.googleusercontent.com</string>
+
+    <string name="local_required">Digite um nome para o local.</string>
+    <string name="lote_invalid_data">Preencha a quantidade e a validade do lote.</string>
+    <string name="invalid_date_format">Formato de data inválido.</string>
+    <string name="permission_denied_tooltip">Permissão para registrar doses negada pelo cuidador.</string>
+    <string name="summary_icon_desc">Ícone de resumo do dia</string>
+
+    <string name="vaccine_taken">Tomada</string>
+    <string name="vaccine_late">Atrasada</string>
+    <string name="vaccine_next">Próxima</string>
+    <string name="vaccine_ok">OK</string>
+
+    <string name="add_schedule_title">Novo Agendamento</string>
+    <string name="edit_schedule_title">Editar Agendamento</string>
+    <string name="schedule_title_for">Agenda de %1$s</string>
+    <string name="schedule_date_picker_title">Data do Agendamento</string>
+    <string name="required_field">Campo obrigatório</string>
+    <string name="invalid_schedule_type">Tipo de agendamento inválido.</string>
+    <string name="schedule_date_past_error">A data e a hora do agendamento não podem ser no passado.</string>
+    <string name="schedule_saved_success">Agendamento salvo com sucesso!</string>
+    <string name="error_saving_schedule">Erro: %1$s</string>
+    <string name="permission_denied_add_schedule">Você não tem permissão para adicionar agendamentos. Para mais informações, contate seu cuidador.</string>
+    <string name="delete_schedule_title">Excluir Agendamento?</string>
+    <string name="delete_schedule_message">Tem certeza que deseja excluir \'%1$s\'?</string>
+    <string name="cancel">Cancelar</string>
+    <string name="delete">Excluir</string>
+    <string name="edit">Editar</string>
+
+    <string name="add_dependent_title">Adicionar Novo Dependente</string>
+    <string name="edit_dependent_title">Editar Dependente</string>
+    <string name="name_required_error">O nome é obrigatório</string>
+    <string name="select_dob_title">Selecione a Data de Nascimento</string>
+    <string name="dependent_saved_success">Dependente salvo com sucesso!</string>
+    <string name="error_saving_dependent">Erro ao salvar: %1$s</string>
+
+    <string name="required_for_fixed_dose">Obrigatório para dose fixa</string>
+    <string name="add_at_least_one_time">Adicione pelo menos um horário</string>
+    <string name="select_interval_pattern">Escolha um padrão de intervalo</string>
+    <string name="treatment_start_date">Data de Início do Tratamento</string>
+    <string name="lote_validity_date">Data de Validade do Lote</string>
+    <string name="unit_hint">Unidade (ex: comprimido)</string>
+    <string name="quantity_hint">Quantidade*</string>
+    <string name="update_button">Atualizar Medicamento</string>
+    <string name="permission_denied">Permissão de notificação negada.</string>
+    <string name="permission_needed_title">Permissão Necessária</string>
+    <string name="exact_alarm_permission_message">Para garantir que os lembretes funcionem corretamente, o aplicativo precisa de permissão para agendar alarmes exatos.</string>
+    <string name="grant">Conceder</string>
+    <string name="not_now">Agora não</string>
+    <string name="medication_saved_sporadic">Medicamento salvo na sua Caixa de Remédios!</string>
+    <string name="save_medication">salvar medicamento</string>
+    <string name="medication_saved">Medicamento salvo com sucesso!</string>
+
+    <string name="analysis_loading_text">A nossa IA está a analisar os dados...</string>
+    <string name="analysis_error_text">Ocorreu um erro ao gerar a análise.</string>
+    <string name="retry_button_text">Tentar Novamente</string>
+    <string name="error_icon_description">Ícone de erro</string>
+    <string name="predictive_analysis_title">Análise Preditiva</string>
+    <string name="correlations_title">Correlações</string>
+    <string name="interactions_title">Interações Medicamentosas</string>
+    <string name="side_effects_title">Efeitos Colaterais</string>
+    <string name="observations_title">Observações Adicionais</string>
+    <string name="save_pdf_button_text">Salvar PDF</string>
+    <string name="share_button_text">Partilhar</string>
+    <string name="ai_disclaimer">Esta análise é gerada por inteligência artificial e não substitui uma consulta médica. Sempre consulte um profissional de saúde para diagnósticos e tratamentos.</string>
+
+    <string name="add_medication_title">Adicionar Medicamento</string>
+    <string name="edit_medication_title">Editar Medicamento</string>
+    <string name="data_copied_success">Dados copiados. Revise e salve.</string>
+    <string name="end_date_before_start_error">A data de término não pode ser anterior à data de início.</string>
+    <string name="select_end_date_error">Por favor, selecione uma data de término.</string>
+    <string name="treatment_end_date_title">Data de Término do Tratamento</string>
+    <string name="first_dose_time_title">Qual o horário da 1ª dose de %1$s?</string>
+
+    <string name="guide_start_here">Comece por aqui!</string>
+    <string name="guide_add_first_dependent">Toque para adicionar a primeira pessoa que você irá cuidar.</string>
+    <string name="guide_manage_dependent">Gerencie um Dependente</string>
+    <string name="guide_manage_dependent_desc">Clique para expandir e ver detalhes. Clique novamente na área principal para entrar no painel de %1$s.</string>
+    <string name="guide_main_menu">Menu Principal</string>
+    <string name="guide_main_menu_desc">Acesse seu perfil e configurações por aqui.</string>
+    <string name="dependent_created_success">Dependente Criado com Sucesso!</string>
+    <string name="dependent_credentials_message">As credenciais de acesso para %1$s são:\n\nCódigo de Vínculo: %2$s\nSenha: %3$s\n\nAnote ou compartilhe essas informações de forma segura com o dependente.</string>
+    <string name="credentials_label">Credenciais NidusCare</string>
+    <string name="credentials_copied">Credenciais copiadas!</string>
+    <string name="understand">Entendi</string>
+    <string name="copy">Copiar</string>
+    <string name="invite_accepted">Convite aceito! O novo dependente aparecerá na sua lista.</string>
+    <string name="error_accepting_invite">Erro ao aceitar convite: %1$s</string>
+    <string name="invite_declined">Convite recusado.</string>
+    <string name="error_declining_invite">Erro ao recusar o convite.</string>
+    <string name="cannot_delete_self_care_profile">Não é possível excluir seu próprio perfil de autocuidado.</string>
+    <string name="dependent_deleted_success">%1$s foi excluído(a).</string>
+    <string name="error_deleting_dependent">Erro ao excluir %1$s.</string>
+    <string name="fullscreen_alarm_status_updated">Alarme de tela cheia %1$s para %2$s.</string>
+    <string name="status_activated">ativado</string>
+    <string name="status_deactivated">desativado</string>
+    <string name="empty_state_no_dependents_title">Nenhum dependente</string>
+    <string name="empty_state_no_dependents_subtitle">Adicione um dependente para começar a gerenciar os cuidados.</string>
+
+    <string name="dose_history_title">Histórico de Doses</string>
+    <string name="filter_by_medication">Filtrar por Medicamento</string>
+    <string name="all_medications">Todos os medicamentos</string>
+    <string name="filter_button">Filtrar</string>
+    <string name="empty_state_no_dose_history_title">Nenhum histórico de dose</string>
+    <string name="empty_state_no_dose_history_subtitle">Quando as doses forem registradas, elas aparecerão aqui.</string>
+
+    <string name="field_required">Campo obrigatório</string>
+
+    <string name="education_center_title">Central Educativa</string>
+
+    <string name="manage_caregivers_title">Gerenciar Cuidadores</string>
+    <string name="manage_caregivers_of_dependent">Cuidadores de %1$s</string>
+    <string name="self_care_no_sharing">Seu perfil de autocuidado não pode ser compartilhado com outros cuidadores.</string>
+    <string name="current_caregivers">Cuidadores Atuais</string>
+    <string name="pending_invites">Convites Pendentes</string>
+    <string name="invite_new_caregiver">Convidar Novo Cuidador</string>
+    <string name="invite_caregiver_message">Digite o e-mail do cuidador que você deseja convidar. Ele(a) precisa ter uma conta no NidusCare.</string>
+    <string name="send_invite">Enviar Convite</string>
+    <string name="invalid_email_please_insert">Por favor, insira um e-mail válido.</string>
+    <string name="remove_caregiver_title">Remover Cuidador?</string>
+    <string name="remove_caregiver_message">Tem certeza que deseja remover %1$s do círculo de cuidado de %2$s? Ele(a) perderá o acesso a todos os dados.</string>
+    <string name="remove">Remover</string>
+    <string name="cancel_invite_title">Cancelar Convite?</string>
+    <string name="cancel_invite_message">Tem certeza que deseja cancelar o convite enviado para %1$s?</string>
+    <string name="dialog_option_no">Não</string>
+    <string name="dialog_option_yes_cancel">Sim, Cancelar</string>
+
+
+    <string name="add_with_camera">Adicionar com Câmera</string>
+    <string name="scan_medication_box_title">Escanear Embalagem</string>
+    <string name="scan_medication_box_subtitle">Centralize a caixa ou cartela do medicamento</string>
+    <string name="analyzing_with_ai">Analisando com IA...</string>
+    <string name="confirm_scanned_data">Confirme os Dados Extraídos</string>
+    <string name="expiration_date">Data de Validade*</string>
+    <string name="stock_quantity">Quantidade em Estoque*</string>
+    <string name="medication_name">Nome do Medicamento*</string>
+    <string name="therapeutic_class">Classe Terapêutica</string>
+    <string name="notes">Anotações</string>
+    <string name="error_analyzing_image">Não foi possível analisar a imagem. Tente uma foto mais nítida.</string>
+    <string name="functionality_premium">Funcionalidade Premium</string>
+    <string name="scan_medication_premium_desc">Escanear caixas de remédio com a câmera é um recurso exclusivo para usuários Premium. Faça upgrade para usar esta e outras funcionalidades avançadas!</string>
+    <string name="go_premium">Ver Planos</string>
+
+    <string name="delete_medication_title">Excluir Medicamento?</string>
+    <string name="delete_medication_farmacinha_message">Tem certeza que deseja excluir permanentemente \'%1$s\' da Caixa de Remédios de %2$s?</string>
+
+    <string name="active_ingredient">Princípio Ativo</string>
+    <string name="lot_number">Lote</string>
+
+</resources>
