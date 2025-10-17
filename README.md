@@ -30,7 +30,7 @@ NidusCare é um app nativo Android (Kotlin) para gestão completa de saúde, foc
 * **Injeção de Dependência:** Hilt (Dagger)
 * **Networking:** Retrofit2 & OkHttp (para Google Places)
 * **Backend:** Firebase (Auth, Firestore, Storage, Cloud Functions)
-* **IA (Backend):** Google Vertex AI (Gemini 1.5 Pro Vision)
+* **IA (Backend):** Google Vertex AI (Gemini 2.5 Pro Vision)
 * **Bibliotecas de UI:** Lottie (Animações), MPAndroidChart (Gráficos), Coil (Imagens).
 
 ## ⚖️ Licença
