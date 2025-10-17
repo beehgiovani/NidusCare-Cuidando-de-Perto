@@ -2,6 +2,7 @@ package com.developersbeeh.medcontrol.ui.listmedicamentos
 
 import android.R.attr.colorError
 import android.R.attr.colorPrimary
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -66,9 +67,14 @@ class MedicamentoAdapter(
             }
         }
 
+        @SuppressLint("ResourceType")
         fun bind(uiState: MedicamentoUiState, isExpanded: Boolean) {
             val context = binding.root.context
             val medicamento = uiState.medicamento
+
+            val errorColor = MaterialColors.getColor(context, colorError, Color.RED)
+            val warningColor = ContextCompat.getColor(context, R.color.colorWarning)
+            val primaryColor = MaterialColors.getColor(context, colorPrimary, Color.BLUE)
 
             binding.root.alpha = if (uiState.status == MedicamentoStatus.FINALIZADO) 0.6f else 1.0f
 
@@ -80,6 +86,7 @@ class MedicamentoAdapter(
             } else {
                 TooltipCompat.setTooltipText(binding.buttonMarkAsTaken, null)
             }
+
 
             binding.detailsLayout.visibility = if (isExpanded) View.VISIBLE else View.GONE
             binding.imageViewExpandCollapse.rotation = if (isExpanded) 180f else 0f
@@ -96,99 +103,133 @@ class MedicamentoAdapter(
             updateStatusIndicators(uiState, context)
             updateAdherenceProgress(uiState)
 
-            binding.textViewFrequenciaHorario.visibility = if (medicamento.isUsoEsporadico) View.GONE else View.VISIBLE
-            binding.textViewDuracao.visibility = if (medicamento.isUsoEsporadico) View.GONE else View.VISIBLE
 
-            binding.textViewFrequenciaHorario.text = "Horários: ${medicamento.horarios.sorted().joinToString(", ") { it.format(timeFormatter) }}"
-            binding.textViewDuracao.text = if (medicamento.isUsoContinuo) "Uso contínuo" else "Duração: ${medicamento.duracaoDias} dia(s)"
+            if (isExpanded) {
+                binding.textViewFrequenciaHorario.visibility = if (medicamento.isUsoEsporadico) View.GONE else View.VISIBLE
+                binding.textViewDuracao.visibility = if (medicamento.isUsoEsporadico) View.GONE else View.VISIBLE
 
-            if (medicamento.anotacoes.isNullOrBlank()) {
-                binding.anotacoesLayout.visibility = View.GONE
-            } else {
-                binding.anotacoesLayout.visibility = View.VISIBLE
-                binding.textViewAnotacoes.text = medicamento.anotacoes
+                binding.textViewFrequenciaHorario.text = "Horários: ${medicamento.horarios.sorted().joinToString(", ") { it.format(timeFormatter) }}"
+                binding.textViewDuracao.text = if (medicamento.isUsoContinuo) "Uso contínuo" else "Duração: ${medicamento.duracaoDias} dia(s)"
+
+                if (medicamento.anotacoes.isNullOrBlank()) {
+                    binding.anotacoesLayout.visibility = View.GONE
+                } else {
+                    binding.anotacoesLayout.visibility = View.VISIBLE
+                    binding.textViewAnotacoes.text = medicamento.anotacoes
+                }
+
+                if (medicamento.tipo == TipoMedicamento.TOPICO || medicamento.tipo == TipoMedicamento.INJETAVEL) {
+                    binding.textViewUltimoLocal.visibility = if (uiState.ultimoLocalAplicado != null) View.VISIBLE else View.GONE
+                    binding.textViewUltimoLocal.text = "Última aplicação: ${uiState.ultimoLocalAplicado ?: "N/A"}"
+                    binding.textViewProximoLocal.visibility = if (uiState.proximoLocalSugerido != null) View.VISIBLE else View.GONE
+                    binding.textViewProximoLocal.text = "Próxima aplicação: ${uiState.proximoLocalSugerido ?: "N/A"}"
+                } else {
+                    binding.textViewUltimoLocal.visibility = View.GONE
+                    binding.textViewProximoLocal.visibility = View.GONE
+                }
+
+                if (isCaregiver) {
+                    binding.actionsLayout.visibility = View.VISIBLE
+                    binding.buttonPausePlay.setIconResource(if (medicamento.isPaused) R.drawable.ic_play_arrow else R.drawable.ic_pause)
+                    binding.buttonPausePlay.contentDescription = if (medicamento.isPaused) "Ativar" else "Pausar"
+                    binding.buttonPausePlay.setOnClickListener { onPausePlayClick(uiState) }
+                    binding.buttonEdit.setOnClickListener { onEditClick(uiState) }
+                    binding.buttonDelete.setOnClickListener { onDeleteClick(uiState) }
+
+                    val isEligibleToSkip = !medicamento.isPaused &&
+                            (uiState.status == MedicamentoStatus.PROXIMA_DOSE || uiState.status == MedicamentoStatus.ATRASADO)
+                    binding.buttonSkip.isVisible = isEligibleToSkip && podeRegistrarDose
+
+                } else {
+                    binding.actionsLayout.visibility = View.GONE
+                }
             }
 
-            if (medicamento.lotes.isNotEmpty() || medicamento.nivelDeAlertaEstoque > 0) {
-                binding.estoqueLayout.visibility = View.VISIBLE
-                val errorColor = ContextCompat.getColor(context, R.color.colorError)
-                val warningColor = ContextCompat.getColor(context, R.color.colorWarning) // ✅ CORREÇÃO: Usando a cor correta do seu projeto
+            // --- Lógica do Bloco de Estoque (Detalhado e Resumido) ---
+            val hasStockInfo = medicamento.lotes.isNotEmpty() || medicamento.nivelDeAlertaEstoque > 0
+            val currentStock = medicamento.estoqueAtualTotal
+            val initialStock = medicamento.estoqueInicialTotal
 
-                if (medicamento.estoqueAtualTotal <= 0) {
-                    binding.progressEstoque.visibility = View.GONE
-                    binding.textViewEstoque.text = "Estoque zerado"
-                    binding.textViewEstoque.setTextColor(errorColor)
-                    binding.buttonRefill.text = "Repor"
-                } else {
-                    binding.progressEstoque.visibility = View.VISIBLE
-                    binding.textViewEstoque.setTextColor(MaterialColors.getColor(context, MaterialR.attr.colorOnSurfaceVariant, Color.GRAY))
-                    binding.progressEstoque.max = if(medicamento.estoqueInicialTotal > 0) medicamento.estoqueInicialTotal.toInt() else medicamento.estoqueAtualTotal.toInt()
-                    binding.progressEstoque.progress = medicamento.estoqueAtualTotal.toInt()
-                    binding.textViewEstoque.text = String.format("%.1f de %.1f %s restantes", medicamento.estoqueAtualTotal, medicamento.estoqueInicialTotal, medicamento.unidadeDeEstoque)
-                    binding.buttonRefill.text = "Repor"
-                }
+            // Visibilidade dos blocos de estoque
+            binding.estoqueLayout.visibility = if (isExpanded && hasStockInfo) View.VISIBLE else View.GONE
+            binding.summaryStockLayout.visibility = if (!isExpanded && hasStockInfo) View.VISIBLE else View.GONE // ✅ ADIÇÃO
+
+            if(hasStockInfo) {
+                val percentual = if (initialStock > 0) (currentStock / initialStock) * 100 else 0.0
+                val progress = currentStock.toInt()
+                // Garante que o max não seja 0 se o estoque inicial for 0 mas o atual não
+                val maxProgress = (if(initialStock > 0) initialStock else currentStock).toInt().coerceAtLeast(1)
 
                 val loteMaisProximo = medicamento.lotes
                     .filter { it.dataValidade.isAfter(LocalDate.now().minusDays(1)) }
                     .minByOrNull { it.dataValidade }
 
-                if (loteMaisProximo != null) {
-                    binding.textViewValidadeProxima.visibility = View.VISIBLE
-                    binding.textViewValidadeProxima.text = "Vencimento próximo: ${loteMaisProximo.dataValidade.format(dateFormatter)}"
-                    when {
-                        loteMaisProximo.dataValidade.isBefore(LocalDate.now()) -> binding.textViewValidadeProxima.setTextColor(errorColor)
-                        loteMaisProximo.dataValidade.isBefore(LocalDate.now().plusDays(30)) -> binding.textViewValidadeProxima.setTextColor(warningColor) // ✅ CORREÇÃO
-                        else -> binding.textViewValidadeProxima.setTextColor(MaterialColors.getColor(context, MaterialR.attr.colorOnSurfaceVariant, Color.GRAY))
-                    }
-                } else {
-                    binding.textViewValidadeProxima.visibility = View.VISIBLE
-                    binding.textViewValidadeProxima.text = if (medicamento.estoqueAtualTotal > 0) "Todos os lotes estão vencidos" else "Sem lotes válidos"
-                    binding.textViewValidadeProxima.setTextColor(errorColor)
-                }
-
-                val percentual = if (medicamento.estoqueInicialTotal > 0) (medicamento.estoqueAtualTotal / medicamento.estoqueInicialTotal) * 100 else 0.0
                 val corProgresso = when {
-                    medicamento.estoqueAtualTotal <= 0 -> errorColor
-                    medicamento.nivelDeAlertaEstoque > 0 && medicamento.estoqueAtualTotal <= medicamento.nivelDeAlertaEstoque -> errorColor
-                    percentual <= 50 -> warningColor // ✅ CORREÇÃO
-                    else -> MaterialColors.getColor(context, colorPrimary, Color.BLUE)
+                    currentStock <= 0 -> errorColor
+                    medicamento.nivelDeAlertaEstoque > 0 && currentStock <= medicamento.nivelDeAlertaEstoque -> errorColor
+                    loteMaisProximo != null && loteMaisProximo.dataValidade.isBefore(LocalDate.now().plusDays(30)) -> warningColor
+                    percentual <= 50 -> warningColor
+                    else -> primaryColor
                 }
-                binding.progressEstoque.setIndicatorColor(corProgresso)
 
-                binding.buttonRefill.setOnClickListener { onRefillClick(uiState) }
-                binding.buttonRefill.visibility = if (isCaregiver) View.VISIBLE else View.GONE
+                if (isExpanded) {
+                    // --- Preenche o Bloco de Estoque DETALHADO ---
+                    if (currentStock <= 0) {
+                        binding.progressEstoque.visibility = View.GONE
+                        binding.textViewEstoque.text = "Estoque zerado"
+                        binding.textViewEstoque.setTextColor(errorColor)
+                        binding.buttonRefill.text = "Repor"
+                    } else {
+                        binding.progressEstoque.visibility = View.VISIBLE
+                        binding.textViewEstoque.setTextColor(MaterialColors.getColor(context, MaterialR.attr.colorOnSurfaceVariant, Color.GRAY))
+                        binding.progressEstoque.max = maxProgress
+                        binding.progressEstoque.progress = progress
+                        binding.textViewEstoque.text = String.format("%.1f de %.1f %s restantes", currentStock, initialStock, medicamento.unidadeDeEstoque)
+                        binding.buttonRefill.text = "Repor"
+                    }
 
+                    if (loteMaisProximo != null) {
+                        binding.textViewValidadeProxima.visibility = View.VISIBLE
+                        binding.textViewValidadeProxima.text = "Vencimento próximo: ${loteMaisProximo.dataValidade.format(dateFormatter)}"
+                        binding.textViewValidadeProxima.setTextColor(when {
+                            loteMaisProximo.dataValidade.isBefore(LocalDate.now()) -> errorColor
+                            loteMaisProximo.dataValidade.isBefore(LocalDate.now().plusDays(30)) -> warningColor
+                            else -> MaterialColors.getColor(context, MaterialR.attr.colorOnSurfaceVariant, Color.GRAY)
+                        })
+                    } else {
+                        binding.textViewValidadeProxima.visibility = View.VISIBLE
+                        binding.textViewValidadeProxima.text = if (currentStock > 0) "Todos os lotes estão vencidos" else "Sem lotes válidos"
+                        binding.textViewValidadeProxima.setTextColor(errorColor)
+                    }
+
+                    binding.progressEstoque.setIndicatorColor(corProgresso)
+                    binding.buttonRefill.setOnClickListener { onRefillClick(uiState) }
+                    binding.buttonRefill.visibility = if (isCaregiver) View.VISIBLE else View.GONE
+
+                } else {
+                    // --- ✅ ADIÇÃO: Preenche o Bloco de Estoque RESUMIDO ---
+                    binding.progressEstoqueResumido.max = maxProgress
+                    binding.progressEstoqueResumido.progress = progress
+                    binding.progressEstoqueResumido.setIndicatorColor(corProgresso)
+
+                    if (currentStock <= 0) {
+                        binding.textViewEstoqueResumido.text = "Estoque zerado!"
+                        binding.textViewEstoqueResumido.setTextColor(errorColor)
+                    } else if (medicamento.nivelDeAlertaEstoque > 0 && currentStock <= medicamento.nivelDeAlertaEstoque) {
+                        binding.textViewEstoqueResumido.text = "Estoque baixo: ${currentStock.toInt()} ${medicamento.unidadeDeEstoque}"
+                        binding.textViewEstoqueResumido.setTextColor(errorColor)
+                    } else {
+                        binding.textViewEstoqueResumido.text = "Estoque: ${percentual.toInt()}%"
+                        binding.textViewEstoqueResumido.setTextColor(MaterialColors.getColor(context, MaterialR.attr.colorOnSurfaceVariant, Color.GRAY))
+                    }
+                }
             } else {
+                // Se não houver info de estoque, esconde os dois blocos
                 binding.estoqueLayout.visibility = View.GONE
-            }
-
-            if (medicamento.tipo == TipoMedicamento.TOPICO || medicamento.tipo == TipoMedicamento.INJETAVEL) {
-                binding.textViewUltimoLocal.visibility = if (uiState.ultimoLocalAplicado != null) View.VISIBLE else View.GONE
-                binding.textViewUltimoLocal.text = "Última aplicação: ${uiState.ultimoLocalAplicado ?: "N/A"}"
-                binding.textViewProximoLocal.visibility = if (uiState.proximoLocalSugerido != null) View.VISIBLE else View.GONE
-                binding.textViewProximoLocal.text = "Próxima aplicação: ${uiState.proximoLocalSugerido ?: "N/A"}"
-            } else {
-                binding.textViewUltimoLocal.visibility = View.GONE
-                binding.textViewProximoLocal.visibility = View.GONE
+                binding.summaryStockLayout.visibility = View.GONE
             }
 
             binding.buttonMarkAsTaken.setOnClickListener { onMarkAsTakenClick(uiState) }
-
-            if (isCaregiver && isExpanded) {
-                binding.actionsLayout.visibility = View.VISIBLE
-                binding.buttonPausePlay.setIconResource(if (medicamento.isPaused) R.drawable.ic_play_arrow else R.drawable.ic_pause)
-                binding.buttonPausePlay.contentDescription = if (medicamento.isPaused) "Ativar" else "Pausar"
-                binding.buttonPausePlay.setOnClickListener { onPausePlayClick(uiState) }
-                binding.buttonEdit.setOnClickListener { onEditClick(uiState) }
-                binding.buttonDelete.setOnClickListener { onDeleteClick(uiState) }
-
-                val isEligibleToSkip = !medicamento.isPaused &&
-                        (uiState.status == MedicamentoStatus.PROXIMA_DOSE || uiState.status == MedicamentoStatus.ATRASADO)
-                binding.buttonSkip.isVisible = isEligibleToSkip && podeRegistrarDose
-
-            } else {
-                binding.actionsLayout.visibility = View.GONE
-            }
         }
 
         private fun toggleDetailsVisibility(position: Int) {
@@ -204,6 +245,7 @@ class MedicamentoAdapter(
             }
         }
 
+        @SuppressLint("ResourceType")
         private fun updateStatusIndicators(uiState: MedicamentoUiState, context: Context) {
             binding.textViewStatus.text = uiState.statusText
             val color: Int

@@ -4,7 +4,6 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/backlogin"
     tools:context="com.developersbeeh.medcontrol.ui.dosehistory.DoseHistoryFragment">
 
     <com.google.android.material.progressindicator.CircularProgressIndicator
