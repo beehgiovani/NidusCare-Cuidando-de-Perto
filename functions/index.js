@@ -1840,6 +1840,5 @@ exports.onDependentDeleted = onDocumentWritten({ document: "dependentes/{depende
             logger.error(`[Exclusão] Falha ao limpar a sub-coleção '${result.reason.collection}':`, result.reason);
         }
     });
-
     logger.info(`[Exclusão] Limpeza de dados para o dependente ${dependentId} concluída.`);
 });
