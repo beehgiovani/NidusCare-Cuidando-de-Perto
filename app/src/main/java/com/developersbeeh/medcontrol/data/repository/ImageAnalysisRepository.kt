@@ -38,16 +38,19 @@ class ImageAnalysisRepository @Inject constructor(
             val dependente = firestoreRepository.getDependente(dependentId)
             val medicamentosAtuais = medicationRepository.getMedicamentos(dependentId).first()
 
-            // ✅ REVERSÃO: Voltando a usar a URL de Download (HTTPS)
+            // ✅ CORREÇÃO: Lógica de upload agora gera uma GCS URI (gs://)
             val uniqueFileName = "${UUID.randomUUID()}-${imageUri.lastPathSegment}"
             val storageRef = storage.reference.child("prescription_scans/${currentUser.uid}/$uniqueFileName")
             storageRef.putFile(imageUri).await()
-            val downloadUrl = storageRef.downloadUrl.await().toString()
-            Log.d(TAG, "Upload da receita concluído. URL: $downloadUrl")
 
-            // ✅ REVERSÃO: O corpo da requisição agora usa 'imageUri' (HTTPS)
+            // Pega a GCS URI (ex: "gs://seu-bucket/prescription_scans/...")
+            // USA storageRef.toString() em vez de storageRef.downloadUrl.await().toString()
+            val gcsUri = storageRef.toString()
+            Log.d(TAG, "Upload da receita concluído. GCS URI: $gcsUri")
+
+            // ✅ CORREÇÃO: O corpo da requisição agora usa 'imageGcsUri'
             val data = hashMapOf(
-                "imageUri" to downloadUrl,
+                "imageGcsUri" to gcsUri, // Padronizado com a outra função de IA
                 "alergiasConhecidas" to (dependente?.alergias ?: context.getString(R.string.none_informed)),
                 "condicoesPreexistentes" to (dependente?.condicoesPreexistentes ?: context.getString(R.string.none_informed)),
                 "medicamentosAtuais" to medicamentosAtuais.map { it.nome }
@@ -94,7 +97,6 @@ class ImageAnalysisRepository @Inject constructor(
 
     private fun parsePosologia(posologia: String): Triple<FrequenciaTipo, Int, Int> {
         val lowerCasePosologia = posologia.lowercase()
-
         var frequenciaTipo = FrequenciaTipo.DIARIA
         var frequenciaValor = 1
         var duracaoDias = 0

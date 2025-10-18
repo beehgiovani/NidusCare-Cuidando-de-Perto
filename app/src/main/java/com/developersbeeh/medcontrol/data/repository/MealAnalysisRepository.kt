@@ -31,19 +31,20 @@ class MealAnalysisRepository @Inject constructor(
         val currentUser = auth.currentUser ?: return Result.failure(Exception(context.getString(R.string.error_user_not_authenticated)))
 
         return try {
-            // ✅ REVERSÃO: Voltando a usar a URL de Download (HTTPS)
+            // ✅ CORREÇÃO: Lógica de upload agora gera uma GCS URI (gs://)
             Log.d(TAG, "Iniciando upload da imagem...")
             val uniqueFileName = "${UUID.randomUUID()}.jpg"
             val storageRef = storage.reference.child("meal_photos/${currentUser.uid}/$uniqueFileName")
             storageRef.putFile(imageUri).await()
-            val downloadUrl = storageRef.downloadUrl.await().toString()
-            Log.d(TAG, "Upload concluído. URL: $downloadUrl")
+
+            val gcsUri = storageRef.toString()
+            Log.d(TAG, "Upload concluído. GCS URI: $gcsUri")
 
             val dependente = firestoreRepository.getDependente(dependentId)
 
-            // ✅ REVERSÃO: Chamar a Cloud Function com a URL (HTTPS)
+            // ✅ CORREÇÃO: Chamar a Cloud Function com a GCS URI
             val data = hashMapOf(
-                "imageUri" to downloadUrl,
+                "imageGcsUri" to gcsUri, // ✅ CORREÇÃO: Envia 'imageGcsUri'
                 "healthProfile" to mapOf(
                     "idade" to (dependente?.dataDeNascimento ?: ""),
                     "peso" to (dependente?.peso ?: ""),
