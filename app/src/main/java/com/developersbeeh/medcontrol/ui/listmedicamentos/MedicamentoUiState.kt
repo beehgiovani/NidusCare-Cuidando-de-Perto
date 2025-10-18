@@ -9,7 +9,7 @@ data class MedicamentoUiState(
     val dosesTomadasHoje: Int,
     val dosesEsperadasHoje: Int,
     val adherenceStatus: AdherenceStatus,
-    // --- NOVOS CAMPOS PARA EXIBIÇÃO NA UI ---
     val ultimoLocalAplicado: String?,
-    val proximoLocalSugerido: String?
+    val proximoLocalSugerido: String?,
+    val isPendingArchive: Boolean = false
 )

@@ -8,6 +8,7 @@ import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import com.developersbeeh.medcontrol.data.model.*
 import com.developersbeeh.medcontrol.util.InvalidIdException
+import com.developersbeeh.medcontrol.ui.timeline.TimelineFilter
 import com.developersbeeh.medcontrol.util.InvalidLinkingCodeException
 import com.developersbeeh.medcontrol.util.UserNotAuthenticatedException
 import com.google.firebase.Firebase
@@ -152,16 +153,28 @@ class FirestoreRepository @Inject constructor(
         }
     }
 
-    fun getTimelinePager(dependentId: String): Pager<QuerySnapshot, TimelineEvent> {
+    fun getTimelinePager(dependentId: String, filter: TimelineFilter): Pager<QuerySnapshot, TimelineEvent> {
         if (dependentId.isBlank()) {
             throw InvalidIdException("ID do dependente é inválido.")
         }
-        val query = db.collection("dependentes").document(dependentId)
+
+        // Constrói a query base
+        var query: Query = db.collection("dependentes").document(dependentId)
             .collection("timeline")
             .orderBy("timestamp", Query.Direction.DESCENDING)
 
+        // ✅ CORREÇÃO: Aplica o filtro na query do Firestore
+        when (filter) {
+            TimelineFilter.DOSE -> query = query.whereEqualTo("type", "DOSE")
+            TimelineFilter.NOTE -> query = query.whereEqualTo("type", "NOTE")
+            TimelineFilter.ACTIVITY -> query = query.whereEqualTo("type", "ACTIVITY")
+            TimelineFilter.INSIGHT -> query = query.whereEqualTo("type", "INSIGHT")
+            TimelineFilter.ALL -> { /* Não aplica filtro adicional */ }
+        }
+
         return Pager(
             config = PagingConfig(pageSize = PAGE_SIZE),
+            // O PagingSource agora recebe a query já filtrada
             pagingSourceFactory = { TimelinePagingSource(query) }
         )
     }

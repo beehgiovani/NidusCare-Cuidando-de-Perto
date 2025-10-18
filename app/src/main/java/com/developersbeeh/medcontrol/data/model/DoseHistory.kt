@@ -5,7 +5,6 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
-// ✅ CORREÇÃO: Enum renomeado para evitar conflito com o enum de cálculo.
 enum class RecordedDoseStatus {
     TAKEN, // Dose foi tomada
     SKIPPED // Dose foi intencionalmente pulada
@@ -17,9 +16,8 @@ data class DoseHistory(
     var userId: String = "",
     var localDeAplicacao: String? = null,
     var quantidadeAdministrada: Double? = null,
-    var notas: String? = null,
+    var notas: String? = null, // ✅ CAMPO RE-ADICIONADO
     var timestampString: String = "",
-    // ✅ CORREÇÃO: O campo agora usa o enum renomeado.
     var status: RecordedDoseStatus = RecordedDoseStatus.TAKEN
 ) {
     // Construtor vazio para o Firestore

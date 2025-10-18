@@ -55,14 +55,37 @@ class MedicamentoAdapter(
 
         init {
             binding.root.setOnClickListener {
+                // ✅ ALTERAÇÃO: Impede o clique se estiver pendente de arquivamento
+                if (getItem(bindingAdapterPosition).isPendingArchive) return@setOnClickListener
                 toggleDetailsVisibility(bindingAdapterPosition)
             }
             binding.imageViewExpandCollapse.setOnClickListener {
+                if (getItem(bindingAdapterPosition).isPendingArchive) return@setOnClickListener
                 toggleDetailsVisibility(bindingAdapterPosition)
             }
             binding.buttonSkip.setOnClickListener {
                 if (bindingAdapterPosition != RecyclerView.NO_POSITION) {
                     onSkipDoseClick(getItem(bindingAdapterPosition))
+                }
+            }
+            binding.buttonArchive.setOnClickListener {
+                if (bindingAdapterPosition != RecyclerView.NO_POSITION) {
+                    onDeleteClick(getItem(bindingAdapterPosition))
+                }
+            }
+            binding.buttonQuickRefill.setOnClickListener {
+                if (bindingAdapterPosition != RecyclerView.NO_POSITION) {
+                    onRefillClick(getItem(bindingAdapterPosition))
+                }
+            }
+            binding.buttonMarkAsTakenDetail.setOnClickListener {
+                if (bindingAdapterPosition != RecyclerView.NO_POSITION) {
+                    onMarkAsTakenClick(getItem(bindingAdapterPosition))
+                }
+            }
+            binding.buttonRefill.setOnClickListener {
+                if (bindingAdapterPosition != RecyclerView.NO_POSITION) {
+                    onRefillClick(getItem(bindingAdapterPosition))
                 }
             }
         }
@@ -76,19 +99,23 @@ class MedicamentoAdapter(
             val warningColor = ContextCompat.getColor(context, R.color.colorWarning)
             val primaryColor = MaterialColors.getColor(context, colorPrimary, Color.BLUE)
 
-            binding.root.alpha = if (uiState.status == MedicamentoStatus.FINALIZADO) 0.6f else 1.0f
-
-            val canTakeDose = podeRegistrarDose && uiState.status != MedicamentoStatus.FINALIZADO
-            binding.buttonMarkAsTaken.isEnabled = canTakeDose
-
-            if (!podeRegistrarDose) {
-                TooltipCompat.setTooltipText(binding.buttonMarkAsTaken, context.getString(R.string.permission_denied_tooltip))
+            // --- ✅ CORREÇÃO: Lógica de estado pendente ---
+            if (uiState.isPendingArchive) {
+                binding.root.alpha = 0.5f
+                binding.root.isClickable = false // Desabilita o clique no card
+                // Garante que todos os botões de ação rápida estejam ocultos
+                binding.buttonQuickRefill.visibility = View.GONE
+                binding.buttonArchive.visibility = View.GONE
+                binding.statusLayout.visibility = View.VISIBLE // Mostra o status (ex: Finalizado)
             } else {
-                TooltipCompat.setTooltipText(binding.buttonMarkAsTaken, null)
+                binding.root.alpha = if (uiState.status == MedicamentoStatus.FINALIZADO) 0.6f else 1.0f
+                binding.root.isClickable = true
             }
+            // --- Fim da correção ---
 
+            val canTakeDose = podeRegistrarDose && uiState.status != MedicamentoStatus.FINALIZADO && !uiState.isPendingArchive
 
-            binding.detailsLayout.visibility = if (isExpanded) View.VISIBLE else View.GONE
+            binding.detailsLayout.visibility = if (isExpanded && !uiState.isPendingArchive) View.VISIBLE else View.GONE
             binding.imageViewExpandCollapse.rotation = if (isExpanded) 180f else 0f
 
             binding.textViewNome.text = medicamento.nome
@@ -100,11 +127,23 @@ class MedicamentoAdapter(
                 TipoMedicamento.INJETAVEL -> R.drawable.ic_injection
             })
 
-            updateStatusIndicators(uiState, context)
+            val hasStockInfo = medicamento.lotes.isNotEmpty() || medicamento.nivelDeAlertaEstoque > 0
+            val currentStock = medicamento.estoqueAtualTotal
+            val isStockLowOrEmpty = (medicamento.nivelDeAlertaEstoque > 0 && currentStock <= medicamento.nivelDeAlertaEstoque) || currentStock <= 0
+
+            updateStatusIndicators(uiState, context, isExpanded, isStockLowOrEmpty)
             updateAdherenceProgress(uiState)
 
-
             if (isExpanded) {
+                // --- Preenche o Bloco de Detalhes (Expandido) ---
+
+                binding.buttonMarkAsTakenDetail.isEnabled = canTakeDose
+                if (!podeRegistrarDose) {
+                    TooltipCompat.setTooltipText(binding.buttonMarkAsTakenDetail, context.getString(R.string.permission_denied_tooltip))
+                } else {
+                    TooltipCompat.setTooltipText(binding.buttonMarkAsTakenDetail, null)
+                }
+
                 binding.textViewFrequenciaHorario.visibility = if (medicamento.isUsoEsporadico) View.GONE else View.VISIBLE
                 binding.textViewDuracao.visibility = if (medicamento.isUsoEsporadico) View.GONE else View.VISIBLE
 
@@ -143,37 +182,24 @@ class MedicamentoAdapter(
                 } else {
                     binding.actionsLayout.visibility = View.GONE
                 }
-            }
 
-            // --- Lógica do Bloco de Estoque (Detalhado e Resumido) ---
-            val hasStockInfo = medicamento.lotes.isNotEmpty() || medicamento.nivelDeAlertaEstoque > 0
-            val currentStock = medicamento.estoqueAtualTotal
-            val initialStock = medicamento.estoqueInicialTotal
+                // Preenche o Bloco de Estoque DETALHADO
+                if (hasStockInfo) {
+                    binding.estoqueLayout.visibility = View.VISIBLE
+                    val initialStock = medicamento.estoqueInicialTotal
+                    val maxProgress = (if(initialStock > 0) initialStock else currentStock).toInt().coerceAtLeast(1)
+                    val loteMaisProximo = medicamento.lotes
+                        .filter { it.dataValidade.isAfter(LocalDate.now().minusDays(1)) }
+                        .minByOrNull { it.dataValidade }
 
-            // Visibilidade dos blocos de estoque
-            binding.estoqueLayout.visibility = if (isExpanded && hasStockInfo) View.VISIBLE else View.GONE
-            binding.summaryStockLayout.visibility = if (!isExpanded && hasStockInfo) View.VISIBLE else View.GONE // ✅ ADIÇÃO
+                    val corProgresso = when {
+                        currentStock <= 0 -> errorColor
+                        isStockLowOrEmpty -> errorColor
+                        loteMaisProximo != null && loteMaisProximo.dataValidade.isBefore(LocalDate.now().plusDays(30)) -> warningColor
+                        (if (initialStock > 0) (currentStock / initialStock) * 100 else 0.0) <= 50 -> warningColor
+                        else -> primaryColor
+                    }
 
-            if(hasStockInfo) {
-                val percentual = if (initialStock > 0) (currentStock / initialStock) * 100 else 0.0
-                val progress = currentStock.toInt()
-                // Garante que o max não seja 0 se o estoque inicial for 0 mas o atual não
-                val maxProgress = (if(initialStock > 0) initialStock else currentStock).toInt().coerceAtLeast(1)
-
-                val loteMaisProximo = medicamento.lotes
-                    .filter { it.dataValidade.isAfter(LocalDate.now().minusDays(1)) }
-                    .minByOrNull { it.dataValidade }
-
-                val corProgresso = when {
-                    currentStock <= 0 -> errorColor
-                    medicamento.nivelDeAlertaEstoque > 0 && currentStock <= medicamento.nivelDeAlertaEstoque -> errorColor
-                    loteMaisProximo != null && loteMaisProximo.dataValidade.isBefore(LocalDate.now().plusDays(30)) -> warningColor
-                    percentual <= 50 -> warningColor
-                    else -> primaryColor
-                }
-
-                if (isExpanded) {
-                    // --- Preenche o Bloco de Estoque DETALHADO ---
                     if (currentStock <= 0) {
                         binding.progressEstoque.visibility = View.GONE
                         binding.textViewEstoque.text = "Estoque zerado"
@@ -183,7 +209,7 @@ class MedicamentoAdapter(
                         binding.progressEstoque.visibility = View.VISIBLE
                         binding.textViewEstoque.setTextColor(MaterialColors.getColor(context, MaterialR.attr.colorOnSurfaceVariant, Color.GRAY))
                         binding.progressEstoque.max = maxProgress
-                        binding.progressEstoque.progress = progress
+                        binding.progressEstoque.progress = currentStock.toInt()
                         binding.textViewEstoque.text = String.format("%.1f de %.1f %s restantes", currentStock, initialStock, medicamento.unidadeDeEstoque)
                         binding.buttonRefill.text = "Repor"
                     }
@@ -203,33 +229,12 @@ class MedicamentoAdapter(
                     }
 
                     binding.progressEstoque.setIndicatorColor(corProgresso)
-                    binding.buttonRefill.setOnClickListener { onRefillClick(uiState) }
                     binding.buttonRefill.visibility = if (isCaregiver) View.VISIBLE else View.GONE
-
                 } else {
-                    // --- ✅ ADIÇÃO: Preenche o Bloco de Estoque RESUMIDO ---
-                    binding.progressEstoqueResumido.max = maxProgress
-                    binding.progressEstoqueResumido.progress = progress
-                    binding.progressEstoqueResumido.setIndicatorColor(corProgresso)
-
-                    if (currentStock <= 0) {
-                        binding.textViewEstoqueResumido.text = "Estoque zerado!"
-                        binding.textViewEstoqueResumido.setTextColor(errorColor)
-                    } else if (medicamento.nivelDeAlertaEstoque > 0 && currentStock <= medicamento.nivelDeAlertaEstoque) {
-                        binding.textViewEstoqueResumido.text = "Estoque baixo: ${currentStock.toInt()} ${medicamento.unidadeDeEstoque}"
-                        binding.textViewEstoqueResumido.setTextColor(errorColor)
-                    } else {
-                        binding.textViewEstoqueResumido.text = "Estoque: ${percentual.toInt()}%"
-                        binding.textViewEstoqueResumido.setTextColor(MaterialColors.getColor(context, MaterialR.attr.colorOnSurfaceVariant, Color.GRAY))
-                    }
+                    binding.estoqueLayout.visibility = View.GONE
                 }
-            } else {
-                // Se não houver info de estoque, esconde os dois blocos
-                binding.estoqueLayout.visibility = View.GONE
-                binding.summaryStockLayout.visibility = View.GONE
-            }
 
-            binding.buttonMarkAsTaken.setOnClickListener { onMarkAsTakenClick(uiState) }
+            }
         }
 
         private fun toggleDetailsVisibility(position: Int) {
@@ -246,10 +251,28 @@ class MedicamentoAdapter(
         }
 
         @SuppressLint("ResourceType")
-        private fun updateStatusIndicators(uiState: MedicamentoUiState, context: Context) {
+        private fun updateStatusIndicators(uiState: MedicamentoUiState, context: Context, isExpanded: Boolean, isStockLow: Boolean) {
+            // Se estiver pendente de arquivamento, não mostre nada além do status de finalizado (que é o que o 'delete' faz)
+            if (uiState.isPendingArchive) {
+                binding.statusLayout.visibility = View.VISIBLE
+                binding.buttonArchive.visibility = View.GONE
+                binding.buttonQuickRefill.visibility = View.GONE
+                binding.textViewStatus.text = "Excluindo..."
+                binding.iconStatus.setImageResource(R.drawable.ic_delete)
+                binding.textViewStatus.setTextColor(MaterialColors.getColor(context, colorError, Color.RED))
+                binding.iconStatus.setColorFilter(MaterialColors.getColor(context, colorError, Color.RED))
+                binding.buttonMarkAsTakenDetail.visibility = View.GONE
+                return
+            }
+
             binding.textViewStatus.text = uiState.statusText
             val color: Int
             val icon: Int
+
+            binding.buttonArchive.visibility = View.GONE
+            binding.buttonQuickRefill.visibility = View.GONE
+            binding.statusLayout.visibility = View.VISIBLE
+
             when (uiState.status) {
                 MedicamentoStatus.ATRASADO -> {
                     color = MaterialColors.getColor(context, colorError, Color.RED)
@@ -263,10 +286,18 @@ class MedicamentoAdapter(
                     color = MaterialColors.getColor(context, MaterialR.attr.colorSecondary, Color.CYAN)
                     icon = R.drawable.ic_add_circle
                 }
-                MedicamentoStatus.FINALIZADO,
+                MedicamentoStatus.FINALIZADO -> {
+                    color = ContextCompat.getColor(context, R.color.success_green)
+                    icon = R.drawable.ic_check
+                    if (!isExpanded && isCaregiver) {
+                        binding.buttonArchive.visibility = View.VISIBLE
+                        binding.statusLayout.visibility = View.GONE
+                    }
+                }
                 MedicamentoStatus.SEM_NOTIFICACAO -> {
                     color = ContextCompat.getColor(context, R.color.success_green)
                     icon = R.drawable.ic_check
+                    binding.statusLayout.visibility = View.GONE
                 }
                 MedicamentoStatus.PAUSADO -> {
                     color = MaterialColors.getColor(context, MaterialR.attr.colorOutline, Color.GRAY)
@@ -276,20 +307,32 @@ class MedicamentoAdapter(
             binding.textViewStatus.setTextColor(color)
             binding.iconStatus.setImageResource(icon)
             binding.iconStatus.setColorFilter(color)
-            binding.statusLayout.visibility = if (uiState.status == MedicamentoStatus.SEM_NOTIFICACAO) View.GONE else View.VISIBLE
+
+            if (!isExpanded && isCaregiver && isStockLow && uiState.status != MedicamentoStatus.FINALIZADO) {
+                binding.buttonQuickRefill.visibility = View.VISIBLE
+                binding.statusLayout.visibility = View.GONE
+                binding.buttonArchive.visibility = View.GONE
+            }
+
             val showSporadicButton = uiState.status == MedicamentoStatus.ESPORADICO
             val showScheduledButton = uiState.status == MedicamentoStatus.PROXIMA_DOSE || uiState.status == MedicamentoStatus.ATRASADO
-            if (showSporadicButton) {
-                binding.buttonMarkAsTaken.text = "Registar Dose"
-                binding.buttonMarkAsTaken.visibility = if (podeRegistrarDose) View.VISIBLE else View.GONE
+
+            if (isExpanded) {
+                if (showSporadicButton) {
+                    binding.buttonMarkAsTakenDetail.text = "Registar Dose"
+                    binding.buttonMarkAsTakenDetail.visibility = if (podeRegistrarDose) View.VISIBLE else View.GONE
+                } else {
+                    binding.buttonMarkAsTakenDetail.text = "Tomar Agora"
+                    binding.buttonMarkAsTakenDetail.visibility = if (showScheduledButton && podeRegistrarDose) View.VISIBLE else View.GONE
+                }
             } else {
-                binding.buttonMarkAsTaken.text = "Tomar Agora"
-                binding.buttonMarkAsTaken.visibility = if (showScheduledButton && podeRegistrarDose) View.VISIBLE else View.GONE
+                binding.buttonMarkAsTakenDetail.visibility = View.GONE
             }
         }
 
         private fun updateAdherenceProgress(uiState: MedicamentoUiState) {
-            if (uiState.medicamento.isUsoEsporadico) {
+            // ✅ CORREÇÃO: A lógica de adesão agora usa os IDs do layout principal (mainInfoLayout)
+            if (uiState.medicamento.isUsoEsporadico || uiState.status == MedicamentoStatus.FINALIZADO || uiState.status == MedicamentoStatus.PAUSADO) {
                 binding.adherenceGroup.visibility = View.GONE
                 return
             }
@@ -297,6 +340,7 @@ class MedicamentoAdapter(
             binding.progressAdherence.max = if (uiState.dosesEsperadasHoje > 0) uiState.dosesEsperadasHoje else 1
             binding.progressAdherence.progress = min(uiState.dosesTomadasHoje, uiState.dosesEsperadasHoje)
             binding.textViewAdherence.text = "${uiState.dosesTomadasHoje} de ${uiState.dosesEsperadasHoje} doses hoje"
+
             if (uiState.adherenceStatus == AdherenceStatus.OVERDOSE) {
                 val errorColor = MaterialColors.getColor(binding.root.context, colorError, Color.RED)
                 binding.progressAdherence.progressTintList = ColorStateList.valueOf(errorColor)

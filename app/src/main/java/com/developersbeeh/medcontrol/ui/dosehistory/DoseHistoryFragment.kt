@@ -21,6 +21,8 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
+// ✅ CORREÇÃO: As classes 'DoseHistoryListItem' e 'DoseHistoryAdapter' foram removidas daqui.
+
 @AndroidEntryPoint
 class DoseHistoryFragment : Fragment() {
 

@@ -84,7 +84,6 @@ class CaregiverDashboardViewModel @Inject constructor(
     private val _actionFeedback = MutableLiveData<Event<String>>()
     val actionFeedback: LiveData<Event<String>> = _actionFeedback
 
-    // ✅ ALTERAÇÃO: O evento agora carrega um Pair contendo o item e a View
     private val _navigateToDependentDashboard = MutableLiveData<Event<Pair<DependentWithStatus, View>>>()
     val navigateToDependentDashboard: LiveData<Event<Pair<DependentWithStatus, View>>> = _navigateToDependentDashboard
 
@@ -120,7 +119,10 @@ class CaregiverDashboardViewModel @Inject constructor(
 
                     // 3. Processa cada dependente individualmente
                     val dependentsWithStatusList = dependents.map { dependent ->
+                        // ✅ CORREÇÃO: Filtra medicamentos arquivados antes de qualquer cálculo
                         val medicamentos = medicationRepository.getMedicamentos(dependent.id).first()
+                            .filter { !it.isArchived }
+
                         val doses = medicationRepository.getDoseHistory(dependent.id).first()
                         val schedules = scheduleRepository.getSchedules(dependent.id).first()
                         val insights = firestoreRepository.getInsights(dependent.id).first()
@@ -193,7 +195,6 @@ class CaregiverDashboardViewModel @Inject constructor(
         }
     }
 
-    // ✅ ALTERAÇÃO: A função agora recebe a View para repassar ao evento
     fun onDependentSelected(dependentWithStatus: DependentWithStatus, view: View) {
         _navigateToDependentDashboard.value = Event(dependentWithStatus to view)
     }

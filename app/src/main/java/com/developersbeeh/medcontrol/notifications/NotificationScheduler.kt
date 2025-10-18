@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/notifications/NotificationScheduler.kt
 package com.developersbeeh.medcontrol.notifications
 
 import android.app.AlarmManager
@@ -115,7 +114,7 @@ class NotificationScheduler(private val context: Context) {
     ) {
         try {
             require(medicamento.id.isNotBlank()) { "ID do medicamento não pode ser vazio." }
-            require(dependentId.isNotBlank()) { "ID do dependente não pode ser vazio." }
+            require(dependentId.isNotBlank()) { "ID do dependente é inválido." }
 
             if (!medicamento.usaNotificacao || medicamento.horarios.isEmpty() || medicamento.isPaused) {
                 Log.d(TAG, "Agendamento ignorado para '${medicamento.nome}'. Motivo: Notificação desativada, sem horários ou pausada.")
@@ -137,6 +136,8 @@ class NotificationScheduler(private val context: Context) {
                 putExtra(NotificationBroadcastReceiver.EXTRA_DEPENDENT_NAME, dependentName)
                 putExtra(NotificationBroadcastReceiver.EXTRA_MEDICAMENTO_NOME, medicamento.nome)
                 putExtra(NotificationBroadcastReceiver.EXTRA_MEDICAMENTO_DOSAGEM, medicamento.dosagem)
+                // ✅ ADIÇÃO: Passa a hora exata que foi agendada
+                putExtra(NotificationBroadcastReceiver.EXTRA_SCHEDULED_TIME, nextNotificationTime.toString())
             }
 
             val requestCode = (medicamento.id + nextNotificationTime.toLocalTime().toString()).hashCode()
@@ -245,6 +246,9 @@ class NotificationScheduler(private val context: Context) {
             putExtra(NotificationBroadcastReceiver.EXTRA_DEPENDENT_NAME, dependentName)
             putExtra(NotificationBroadcastReceiver.EXTRA_MEDICAMENTO_NOME, medicamento.nome)
             putExtra(NotificationBroadcastReceiver.EXTRA_MEDICAMENTO_DOSAGEM, medicamento.dosagem)
+            // ✅ ADIÇÃO: Repassa a hora agendada original durante o "snooze"
+            val originalScheduledTime = DoseTimeCalculator.getLastScheduledDoseBeforeNow(medicamento) ?: now
+            putExtra(NotificationBroadcastReceiver.EXTRA_SCHEDULED_TIME, originalScheduledTime.toString())
         }
         val requestCode = (medicamento.id + now.toString() + "snooze").hashCode()
         val pendingIntent = PendingIntent.getBroadcast(
@@ -265,6 +269,7 @@ class NotificationScheduler(private val context: Context) {
                 putExtra(NotificationBroadcastReceiver.EXTRA_DEPENDENT_NAME, dependentName)
                 putExtra(NotificationBroadcastReceiver.EXTRA_MEDICAMENTO_NOME, medicamento.nome)
                 putExtra(NotificationBroadcastReceiver.EXTRA_MEDICAMENTO_DOSAGEM, medicamento.dosagem)
+                putExtra(NotificationBroadcastReceiver.EXTRA_SCHEDULED_TIME, notificationTime.toString())
             }
             val requestCode = (medicamento.id + notificationTime.toLocalTime().toString()).hashCode()
             val pendingIntent = PendingIntent.getBroadcast(
@@ -303,7 +308,6 @@ class NotificationScheduler(private val context: Context) {
         Log.i(TAG, "Agendado acompanhamento #${followUpCount + 1} para '${medicamento.nome}' em 15 minutos.")
     }
 
-    // ✅ NOVA FUNÇÃO ADICIONADA
     fun cancelMissedDoseFollowUp(medicamentoId: String) {
         val intent = Intent(context, MissedDoseFollowUpReceiver::class.java)
         val requestCode = ("missed_follow_up_$medicamentoId").hashCode()
@@ -320,7 +324,6 @@ class NotificationScheduler(private val context: Context) {
         }
     }
 
-    // ✅ NOVA FUNÇÃO ADICIONADA
     fun showMissedDoseFollowUpNotification(medicamento: Medicamento, dependentName: String) {
         val notificationId = (medicamento.id + "_missed_follow_up").hashCode()
         val title = "Atenção: Dose Ainda Pendente"
@@ -356,7 +359,6 @@ class NotificationScheduler(private val context: Context) {
                     putExtra(NotificationBroadcastReceiver.EXTRA_MEDICAMENTO_ID, medicamento.id)
                     putExtra(NotificationBroadcastReceiver.EXTRA_DEPENDENT_ID, dependentId)
                     // Adiciona os outros extras que podem ter sido usados para criar o requestCode original
-                    // Mesmo que não sejam usados diretamente no requestCode, eles afetam o equals() da Intent
                     putExtra(NotificationBroadcastReceiver.EXTRA_MEDICAMENTO_NOME, medicamento.nome)
                     putExtra(NotificationBroadcastReceiver.EXTRA_MEDICAMENTO_DOSAGEM, medicamento.dosagem)
                 }

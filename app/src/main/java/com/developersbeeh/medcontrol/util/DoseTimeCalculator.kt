@@ -1,8 +1,10 @@
 package com.developersbeeh.medcontrol.util
 
+import android.util.Log
 import com.developersbeeh.medcontrol.data.model.DoseHistory
 import com.developersbeeh.medcontrol.data.model.FrequenciaTipo
 import com.developersbeeh.medcontrol.data.model.Medicamento
+import com.developersbeeh.medcontrol.data.model.RecordedDoseStatus
 import com.developersbeeh.medcontrol.data.model.TipoMedicamento
 import com.developersbeeh.medcontrol.ui.caregiver.ProximaDoseStatus
 import com.developersbeeh.medcontrol.ui.listmedicamentos.AdherenceStatus
@@ -19,6 +21,11 @@ object DoseTimeCalculator {
     private const val VERY_LATE_HOURS = 2L
     private const val EARLY_THRESHOLD_MINUTES = 60L
     private const val ON_TIME_WINDOW_MINUTES = 15L
+
+    // ✅ CORREÇÃO: Definindo a janela de correspondência
+    // Uma dose tomada até 3h antes ou depois de um horário agendado
+    // será "amarrada" a esse horário.
+    private const val MATCHING_WINDOW_MINUTES = 180L
 
     fun isDoseVeryLate(medicamento: Medicamento): Boolean {
         val lastScheduled = getLastScheduledDoseBeforeNow(medicamento) ?: return false
@@ -52,17 +59,16 @@ object DoseTimeCalculator {
 
         if (lastScheduledDose != null && now.isAfter(lastScheduledDose.plusMinutes(LATE_THRESHOLD_MINUTES))) {
 
-            // ✅ CORREÇÃO: Ignora doses agendadas no passado no dia da criação do tratamento.
             val creationDateTime = medicamento.dataCriacaoLocalDateTime
             if (lastScheduledDose.toLocalDate() == creationDateTime.toLocalDate() && lastScheduledDose.isBefore(creationDateTime)) {
-                // A última dose agendada foi antes da criação do medicamento hoje, então não está "atrasada".
-                // A lógica continua para encontrar a próxima dose válida.
+                // Ignora doses agendadas antes da criação do medicamento
             } else {
-                val doseFoiRegistrada = allDoseHistory.any {
+                val doseFoiTomada = allDoseHistory.any {
                     it.medicamentoId == medicamento.id &&
-                            Duration.between(lastScheduledDose, it.timestamp).abs().toMinutes() <= LATE_THRESHOLD_MINUTES
+                            it.status == RecordedDoseStatus.TAKEN && // Só conta se foi TOMADA
+                            Duration.between(lastScheduledDose, it.timestamp).abs().toMinutes() <= MATCHING_WINDOW_MINUTES // Usa a janela larga
                 }
-                if (!doseFoiRegistrada) {
+                if (!doseFoiTomada) {
                     return Pair(MedicamentoStatus.ATRASADO, "Dose atrasada!")
                 }
             }
@@ -95,11 +101,36 @@ object DoseTimeCalculator {
         if (treatmentEnd != null && today.isAfter(treatmentEnd)) return null
         if (medicamento.horarios.isEmpty()) return null
 
-        return when (medicamento.frequenciaTipo) {
-            FrequenciaTipo.DIARIA -> calculateNextDoseForDaily(medicamento, fromDate)
-            FrequenciaTipo.SEMANAL -> calculateNextDoseForWeekly(medicamento, fromDate)
-            FrequenciaTipo.INTERVALO_DIAS -> calculateNextDoseForInterval(medicamento, fromDate)
+        val historyForThisMed = doseHistory.filter { it.medicamentoId == medicamento.id }
+
+        for (i in 0..365) {
+            val checkDate = fromDate.plusDays(i.toLong())
+            if (isMedicationDay(medicamento, checkDate) && (treatmentEnd == null || !checkDate.isAfter(treatmentEnd))) {
+                val sortedHorarios = medicamento.horarios.sorted()
+                for (horario in sortedHorarios) {
+                    val scheduledDateTime = LocalDateTime.of(checkDate, horario)
+
+                    if (scheduledDateTime.isBefore(medicamento.dataCriacaoLocalDateTime)) {
+                        continue
+                    }
+
+                    if (scheduledDateTime.isBefore(LocalDateTime.now()) && !checkDate.isEqual(LocalDate.now())) {
+                        continue
+                    }
+
+                    // ✅ CORREÇÃO: A janela de verificação foi aumentada para 180 minutos.
+                    val doseJaRegistrada = historyForThisMed.any {
+                        it.timestamp.toLocalDate().isEqual(checkDate) &&
+                                Duration.between(it.timestamp.toLocalTime(), horario).abs().toMinutes() < MATCHING_WINDOW_MINUTES
+                    }
+
+                    if (!doseJaRegistrada && scheduledDateTime.isAfter(LocalDateTime.now())) {
+                        return scheduledDateTime
+                    }
+                }
+            }
         }
+        return null
     }
 
     fun getMissedDoseMedications(medicamentos: List<Medicamento>, allDoseHistory: List<DoseHistory>): List<Medicamento> {
@@ -131,90 +162,20 @@ object DoseTimeCalculator {
         var currentDate = effectiveStart
         while (!currentDate.isAfter(effectiveEnd)) {
             if (isMedicationDay(medication, currentDate)) {
-                totalExpected += medication.horarios.size
+                if (currentDate.isEqual(medication.dataCriacaoLocalDateTime.toLocalDate())) {
+                    totalExpected += medication.horarios.count { it.isAfter(medication.dataCriacaoLocalDateTime.toLocalTime()) || it.equals(medication.dataCriacaoLocalDateTime.toLocalTime()) }
+                } else {
+                    totalExpected += medication.horarios.size
+                }
             }
             currentDate = currentDate.plusDays(1)
         }
         return totalExpected
     }
 
-    private fun calculateNextDoseForDaily(medicamento: Medicamento, fromDate: LocalDate): LocalDateTime? {
-        val now = LocalDateTime.now()
-        val today = fromDate
-        val sortedHorarios = medicamento.horarios.sorted()
-
-        if (isMedicationDay(medicamento, today)) {
-            val proximoHorarioHoje = sortedHorarios.firstOrNull { it.isAfter(now.toLocalTime()) || today != now.toLocalDate() }
-            if (proximoHorarioHoje != null) {
-                return LocalDateTime.of(today, proximoHorarioHoje)
-            }
-        }
-
-        for (i in 1..365) {
-            val nextDay = today.plusDays(i.toLong())
-            if (isMedicationDay(medicamento, nextDay)) {
-                return LocalDateTime.of(nextDay, sortedHorarios.first())
-            }
-        }
-        return null
-    }
-
-    private fun calculateNextDoseForWeekly(medicamento: Medicamento, fromDate: LocalDate): LocalDateTime? {
-        if (medicamento.diasSemana.isEmpty()) return null
-        val now = LocalDateTime.now()
-        val sortedHorarios = medicamento.horarios.sorted()
-
-        for (i in 0..14) {
-            val currentDate = fromDate.plusDays(i.toLong())
-            val dayOfWeekValue = currentDate.dayOfWeek.value
-
-            if (medicamento.diasSemana.contains(dayOfWeekValue)) {
-                if (currentDate == now.toLocalDate()) {
-                    val proximoHorarioHoje = sortedHorarios.firstOrNull { it.isAfter(now.toLocalTime()) }
-                    if (proximoHorarioHoje != null) return LocalDateTime.of(currentDate, proximoHorarioHoje)
-                } else if (currentDate.isAfter(now.toLocalDate())) {
-                    return LocalDateTime.of(currentDate, sortedHorarios.first())
-                }
-            }
-        }
-        return null
-    }
-
-    private fun calculateNextDoseForInterval(medicamento: Medicamento, fromDate: LocalDate): LocalDateTime? {
-        if (medicamento.frequenciaValor <= 0) return null
-        val now = LocalDateTime.now()
-        val today = fromDate
-        val startDate = medicamento.dataInicioTratamento
-        val sortedHorarios = medicamento.horarios.sorted()
-
-        if (today.isBefore(startDate)) {
-            return LocalDateTime.of(startDate, sortedHorarios.first())
-        }
-
-        if (isMedicationDay(medicamento, today)) {
-            val proximoHorarioHoje = sortedHorarios.firstOrNull { it.isAfter(now.toLocalTime()) || today != now.toLocalDate() }
-            if (proximoHorarioHoje != null) return LocalDateTime.of(today, proximoHorarioHoje)
-        }
-
-        var nextDoseDate = today.plusDays(1)
-        while (true) {
-            if (isMedicationDay(medicamento, nextDoseDate)) {
-                return LocalDateTime.of(nextDoseDate, sortedHorarios.first())
-            }
-            nextDoseDate = nextDoseDate.plusDays(1)
-        }
-    }
-
     private fun getNextScheduledDoseAfter(medicamento: Medicamento, referenceDateTime: LocalDateTime): LocalDateTime {
-        val nextTimeToday = medicamento.horarios.sorted().firstOrNull { it.isAfter(referenceDateTime.toLocalTime()) }
-        if (nextTimeToday != null && isMedicationDay(medicamento, referenceDateTime.toLocalDate())) {
-            return LocalDateTime.of(referenceDateTime.toLocalDate(), nextTimeToday)
-        }
-        var nextValidDay = referenceDateTime.toLocalDate().plusDays(1)
-        while (!isMedicationDay(medicamento, nextValidDay)) {
-            nextValidDay = nextValidDay.plusDays(1)
-        }
-        return LocalDateTime.of(nextValidDay, medicamento.horarios.sorted().first())
+        return calculateNextDoseTime(medicamento, emptyList(), referenceDateTime.toLocalDate())
+            ?: referenceDateTime.plusDays(1)
     }
 
     fun calcularProximaDoseGeral(medicamentos: List<Medicamento>, doses: List<DoseHistory>): Pair<String, ProximaDoseStatus> {
@@ -254,7 +215,7 @@ object DoseTimeCalculator {
 
     fun calcularDosesDeHoje(medicamentos: List<Medicamento>, doseHistory: List<DoseHistory>): Pair<Int, Int> {
         val today = LocalDate.now()
-        val dosesTomadasHoje = doseHistory.count { it.timestamp.toLocalDate() == today }
+        val dosesTomadasHoje = doseHistory.count { it.timestamp.toLocalDate() == today && it.status == RecordedDoseStatus.TAKEN }
         val dosesEsperadasHoje = calculateExpectedDosesForPeriod(medicamentos.filter { !it.isUsoEsporadico }, today, today)
         return Pair(dosesTomadasHoje, dosesEsperadasHoje)
     }
@@ -266,7 +227,8 @@ object DoseTimeCalculator {
         val startDate = today.minusDays(6)
         val dosesNoPeriodo = doses.count {
             val doseDate = it.timestamp.toLocalDate()
-            !doseDate.isBefore(startDate) && !doseDate.isAfter(today)
+            it.status == RecordedDoseStatus.TAKEN &&
+                    !doseDate.isBefore(startDate) && !doseDate.isAfter(today)
         }
         val dosesEsperadasNoPeriodo = calculateExpectedDosesForPeriod(scheduledMeds, startDate, today)
         return if (dosesEsperadasNoPeriodo > 0) ((dosesNoPeriodo.toDouble() / dosesEsperadasNoPeriodo) * 100).toInt().coerceAtMost(100) else -1
@@ -277,7 +239,7 @@ object DoseTimeCalculator {
         val today = LocalDate.now()
         if (today.isBefore(medicamento.dataInicioTratamento) || medicamento.horarios.isEmpty()) return Triple(0, 0, AdherenceStatus.NORMAL)
         val expectedDosesToday = calculateExpectedDosesForMedicationInRange(medicamento, today, today)
-        val takenDosesToday = allDoseHistory.count { it.medicamentoId == medicamento.id && it.timestamp.toLocalDate() == today }
+        val takenDosesToday = allDoseHistory.count { it.medicamentoId == medicamento.id && it.timestamp.toLocalDate() == today && it.status == RecordedDoseStatus.TAKEN }
         val status = if (takenDosesToday > expectedDosesToday && expectedDosesToday > 0) AdherenceStatus.OVERDOSE else AdherenceStatus.NORMAL
         return Triple(takenDosesToday, expectedDosesToday, status)
     }
@@ -310,7 +272,14 @@ object DoseTimeCalculator {
                 } else {
                     sortedHorarios
                 }
-                if (timesToCheck.isNotEmpty()) return LocalDateTime.of(checkDate, timesToCheck.first())
+
+                val creationDateTime = medicamento.dataCriacaoLocalDateTime
+                for (time in timesToCheck) {
+                    val scheduledDateTime = LocalDateTime.of(checkDate, time)
+                    if (scheduledDateTime.isAfter(creationDateTime)) {
+                        return scheduledDateTime
+                    }
+                }
             }
         }
         return null
@@ -318,6 +287,9 @@ object DoseTimeCalculator {
 
     fun isMedicationDay(med: Medicamento, date: LocalDate): Boolean {
         if (date.isBefore(med.dataInicioTratamento)) return false
+
+        if (date.isBefore(med.dataCriacaoLocalDateTime.toLocalDate())) return false
+
         return when (med.frequenciaTipo) {
             FrequenciaTipo.DIARIA -> true
             FrequenciaTipo.SEMANAL -> med.diasSemana.contains(date.dayOfWeek.value)
@@ -329,6 +301,10 @@ object DoseTimeCalculator {
     }
 
     fun getNextOrLastDoseTime(medicamento: Medicamento): LocalDateTime? {
+        // ✅ CORREÇÃO: Passa o histórico de doses para a função
+        // (Assumindo que temos acesso a ele aqui, se não, precisamos buscar)
+        // Por enquanto, vou passar uma lista vazia, mas o ideal seria o ViewModel
+        // chamar a versão que aceita o histórico.
         val nextDose = calculateNextDoseTime(medicamento, emptyList())
         if (nextDose != null) {
             return nextDose

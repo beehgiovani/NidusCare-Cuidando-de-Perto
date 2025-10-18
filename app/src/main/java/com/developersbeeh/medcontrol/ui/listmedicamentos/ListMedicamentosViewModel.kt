@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/listmedicamentos/ListMedicamentosViewModel.kt
 package com.developersbeeh.medcontrol.ui.listmedicamentos
 
 import android.app.Application
@@ -9,6 +8,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.asFlow
 import androidx.lifecycle.asLiveData
 import androidx.lifecycle.viewModelScope
+import com.developersbeeh.medcontrol.R
 import com.developersbeeh.medcontrol.data.model.*
 import com.developersbeeh.medcontrol.data.repository.*
 import com.developersbeeh.medcontrol.notifications.NotificationScheduler
@@ -17,6 +17,7 @@ import com.developersbeeh.medcontrol.util.Event
 import com.google.firebase.functions.FirebaseFunctions
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.Duration
@@ -65,6 +66,8 @@ class ListMedicamentosViewModel @Inject constructor(
     private val _showUndoDeleteSnackbar = MutableLiveData<Event<Medicamento>>()
     val showUndoDeleteSnackbar: LiveData<Event<Medicamento>> = _showUndoDeleteSnackbar
 
+    private val _pendingArchiveIds = MutableStateFlow<Set<String>>(emptySet())
+
     init {
         uiState = _allMedicationsUiState.asFlow().combine(_searchQuery) { medList, query ->
             if (query.isBlank()) medList else medList.filter { it.medicamento.nome.contains(query, ignoreCase = true) }
@@ -84,17 +87,24 @@ class ListMedicamentosViewModel @Inject constructor(
         loadUiStateAndScheduleNotifications()
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun loadUiStateAndScheduleNotifications() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 medicationRepository.getMedicamentos(dependentId)
-                    .map { medicamentos -> medicamentos.filter { !it.isArchived } } // Filtra medicamentos arquivados
-                    .combine(medicationRepository.getDoseHistory(dependentId)) { medicamentos, allDoseHistory ->
-                        val medsFiltrados = medicamentos.filter { !it.isUsoEsporadico }
+                    .combine(_pendingArchiveIds) { medicamentos, pendingIds ->
+                        medicamentos.filter { !it.isArchived || pendingIds.contains(it.id) }
+                            .map { med ->
+                                med to pendingIds.contains(med.id)
+                            }
+                    }
+                    .combine(medicationRepository.getDoseHistory(dependentId)) { medPairs, allDoseHistory ->
 
+                        val medsFiltrados = medPairs.map { it.first }.filter { !it.isUsoEsporadico }
                         val scheduler = NotificationScheduler(getApplication())
                         val depName = _dependentName.value ?: ""
                         val areDoseRemindersEnabled = userPreferences.getDoseRemindersEnabled()
+
                         medsFiltrados.forEach { med ->
                             if (areDoseRemindersEnabled) {
                                 scheduler.schedule(med, dependentId, depName, allDoseHistory)
@@ -106,7 +116,7 @@ class ListMedicamentosViewModel @Inject constructor(
                         val lembretes = reminderRepository.getReminders(dependentId).firstOrNull() ?: emptyList()
                         updateSummary(medsFiltrados, allDoseHistory, lembretes)
 
-                        medsFiltrados.map { medicamento ->
+                        medPairs.map { (medicamento, isPending) ->
                             val status = DoseTimeCalculator.getStatusForMedicamento(medicamento, allDoseHistory)
                             val (taken, expected, adherenceStatus) = DoseTimeCalculator.calculateAdherenceForToday(medicamento, allDoseHistory)
                             val (ultimoLocal, proximoLocal) = DoseTimeCalculator.calculateLocais(medicamento, allDoseHistory)
@@ -119,7 +129,8 @@ class ListMedicamentosViewModel @Inject constructor(
                                 dosesEsperadasHoje = expected,
                                 adherenceStatus = adherenceStatus,
                                 ultimoLocalAplicado = ultimoLocal,
-                                proximoLocalSugerido = proximoLocal
+                                proximoLocalSugerido = proximoLocal,
+                                isPendingArchive = isPending
                             )
                         }.sortedBy { it.status == MedicamentoStatus.FINALIZADO }
                     }.catch { e ->
@@ -137,9 +148,20 @@ class ListMedicamentosViewModel @Inject constructor(
         val dosesEsperadasHoje = medicamentos.sumOf { DoseTimeCalculator.calculateAdherenceForToday(it, allDoseHistory).second }
         val lembretesAtivosHoje = reminders.count { it.isActive }
         val parts = mutableListOf<String>()
-        if (dosesEsperadasHoje > 0) parts.add("$dosesEsperadasHoje ${if (dosesEsperadasHoje > 1) "doses" else "dose"}")
-        if (lembretesAtivosHoje > 0) parts.add("$lembretesAtivosHoje ${if (lembretesAtivosHoje > 1) "lembretes" else "lembrete"}")
-        val summary = if (parts.isEmpty()) "Nenhuma tarefa programada para hoje." else "Hoje você tem ${parts.joinToString(" e ")}."
+        if (dosesEsperadasHoje > 0) parts.add(
+            if (dosesEsperadasHoje > 1) application.getString(R.string.doses_plural, dosesEsperadasHoje)
+            else application.getString(R.string.doses_singular, dosesEsperadasHoje)
+        )
+        if (lembretesAtivosHoje > 0) parts.add(
+            if (lembretesAtivosHoje > 1) application.getString(R.string.reminders_plural, lembretesAtivosHoje)
+            else application.getString(R.string.reminders_singular, lembretesAtivosHoje)
+        )
+
+        val summary = when (parts.size) {
+            0 -> application.getString(R.string.no_scheduled_tasks_today)
+            1 -> application.getString(R.string.today_you_have_summary, parts[0])
+            else -> application.getString(R.string.today_you_have_summary_plural, parts[0], parts[1])
+        }
         _summaryText.postValue(summary)
     }
 
@@ -166,11 +188,11 @@ class ListMedicamentosViewModel @Inject constructor(
                     if (medicamento.isUsoContinuo || medicamento.dataInicioTratamento.plusDays(medicamento.duracaoDias - 1L).isAfter(LocalDate.now())) {
                         _doseConfirmationEvent.postValue(Event(DoseConfirmationEvent.ConfirmExtraDose(medicamento)))
                     } else {
-                        _doseTakenFeedback.postValue(Event("O tratamento para este medicamento já foi finalizado."))
+                        _doseTakenFeedback.postValue(Event(application.getString(R.string.treatment_finished_feedback)))
                     }
                 }
                 else -> {
-                    _doseTakenFeedback.postValue(Event("Não é possível registrar dose para este medicamento no momento."))
+                    _doseTakenFeedback.postValue(Event(application.getString(R.string.cannot_register_dose_now)))
                 }
             }
         }
@@ -180,7 +202,7 @@ class ListMedicamentosViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val doseToSkipTime = DoseTimeCalculator.getNextOrLastDoseTime(medicamento)
             if (doseToSkipTime == null) {
-                _doseTakenFeedback.postValue(Event("Não há uma dose programada para pular."))
+                _doseTakenFeedback.postValue(Event(application.getString(R.string.no_dose_to_skip)))
                 return@launch
             }
 
@@ -189,10 +211,10 @@ class ListMedicamentosViewModel @Inject constructor(
             if (result.isSuccess) {
                 val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
                 val formattedTime = doseToSkipTime.format(timeFormatter)
-                _doseTakenFeedback.postValue(Event("Dose de ${medicamento.nome} das $formattedTime foi pulada."))
+                _doseTakenFeedback.postValue(Event(application.getString(R.string.dose_skipped_success, medicamento.nome, formattedTime)))
                 activityLogRepository.saveLog(dependentId, "pulou a dose de ${medicamento.nome} das $formattedTime", TipoAtividade.DOSE_REGISTRADA)
             } else {
-                _doseTakenFeedback.postValue(Event("Falha ao registrar a dose pulada."))
+                _doseTakenFeedback.postValue(Event(application.getString(R.string.dose_skipped_fail)))
             }
         }
     }
@@ -228,10 +250,10 @@ class ListMedicamentosViewModel @Inject constructor(
             val updatedMedicamento = medicamento.copy(horarios = newHorarios)
             val result = medicationRepository.saveMedicamento(dependentId, updatedMedicamento)
             if (result.isSuccess) {
-                _doseTakenFeedback.postValue(Event("Horários de '${medicamento.nome}' foram reajustados para hoje."))
+                _doseTakenFeedback.postValue(Event(application.getString(R.string.med_schedule_adjusted, medicamento.nome)))
                 activityLogRepository.saveLog(dependentId, "reajustou os horários de ${medicamento.nome}", TipoAtividade.MEDICAMENTO_EDITADO)
             } else {
-                _doseTakenFeedback.postValue(Event("Falha ao reajustar horários."))
+                _doseTakenFeedback.postValue(Event(application.getString(R.string.schedule_adjust_fail)))
             }
         }
     }
@@ -240,7 +262,8 @@ class ListMedicamentosViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val scheduler = NotificationScheduler(getApplication())
             scheduler.cancelSpecificNotification(medicamento, nextDoseTimeToCancel, dependentId, _dependentName.value ?: "")
-            val notas = if (reason.isNotBlank()) "Motivo (adiantado): $reason" else "Dose registrada adiantada."
+            val notas = if (reason.isNotBlank()) application.getString(R.string.dose_recorded_advanced_with_reason, reason)
+            else application.getString(R.string.dose_recorded_advanced)
             proceedToRecordDose(medicamento, null, null, notas)
         }
     }
@@ -259,7 +282,8 @@ class ListMedicamentosViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val scheduler = NotificationScheduler(getApplication())
             scheduler.cancelSpecificNotification(medicamento, nextDoseTimeToCancel, dependentId, _dependentName.value ?: "")
-            val notas = if (note.isNotBlank()) "Motivo (muito adiantado): $note" else "Dose registrada muito adiantada."
+            val notas = if (note.isNotBlank()) application.getString(R.string.dose_recorded_very_advanced_with_reason, note)
+            else application.getString(R.string.dose_recorded_very_advanced)
             proceedToRecordDose(medicamento, null, null, notas)
         }
     }
@@ -271,7 +295,7 @@ class ListMedicamentosViewModel @Inject constructor(
                 val (_, proximoLocal) = DoseTimeCalculator.calculateLocais(medicamento, historico)
                 _doseRegistrationEvent.postValue(Event(DoseRegistrationEvent.ShowLocationSelector(medicamento, proximoLocal, quantidade, glicemia, notas)))
             } catch (e: Exception) {
-                _doseTakenFeedback.postValue(Event("Erro ao buscar histórico."))
+                _doseTakenFeedback.postValue(Event(application.getString(R.string.error_fetching_history)))
             }
         } else {
             confirmDoseWithDetails(medicamento, null, quantidade, glicemia, notas, doseTime)
@@ -282,12 +306,12 @@ class ListMedicamentosViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val result = medicationRepository.recordDoseAndUpdateStock(dependentId, medicamento, local, quantidade, notas, doseTime)
             if (result.isSuccess) {
-                val doseInfo = if (quantidade != null) "$quantidade ${medicamento.unidadeDeEstoque}" else "1 dose"
-                val localInfo = if (local != null) " em '$local'" else ""
+                val doseInfo = if (quantidade != null) "$quantidade ${medicamento.unidadeDeEstoque}" else application.getString(R.string.dose_info_registered_default)
+                val localInfo = if (local != null) application.getString(R.string.dose_info_registered_location, local) else ""
                 activityLogRepository.saveLog(dependentId, "registrou $doseInfo de ${medicamento.nome}$localInfo", TipoAtividade.DOSE_REGISTRADA)
-                _doseTakenFeedback.postValue(Event("$doseInfo de '${medicamento.nome}' registrada$localInfo"))
+                _doseTakenFeedback.postValue(Event(application.getString(R.string.dose_info_registered, doseInfo, medicamento.nome, localInfo)))
             } else {
-                _doseTakenFeedback.postValue(Event("Falha ao registrar a dose."))
+                _doseTakenFeedback.postValue(Event(application.getString(R.string.dose_registration_fail)))
             }
             if (medicamento.tipoDosagem == TipoDosagem.CALCULADA && glicemia != null) {
                 val healthNote = HealthNote(
@@ -295,7 +319,7 @@ class ListMedicamentosViewModel @Inject constructor(
                     userId = userRepository.getCurrentUser()?.uid ?: "dependent_user",
                     type = HealthNoteType.BLOOD_SUGAR,
                     values = mapOf("sugarLevel" to glicemia.toString()),
-                    note = "Registrado automaticamente com a dose de ${medicamento.nome}."
+                    note = application.getString(R.string.note_auto_glycemia, medicamento.nome)
                 ).apply { timestamp = doseTime }
                 firestoreRepository.saveHealthNote(dependentId, healthNote)
             }
@@ -336,27 +360,32 @@ class ListMedicamentosViewModel @Inject constructor(
 
     fun deleteMedicamento(medicamento: Medicamento) {
         viewModelScope.launch(Dispatchers.IO) {
+            _pendingArchiveIds.update { it + medicamento.id }
+
             val scheduler = NotificationScheduler(getApplication())
             scheduler.cancelAllNotifications(medicamento, dependentId)
             val result = medicationRepository.archiveMedicamento(dependentId, medicamento.id)
             if (result.isSuccess) {
                 _showUndoDeleteSnackbar.postValue(Event(medicamento))
             } else {
-                _doseTakenFeedback.postValue(Event("Erro ao excluir medicamento."))
+                _pendingArchiveIds.update { it - medicamento.id }
+                _doseTakenFeedback.postValue(Event(application.getString(R.string.error_deleting_medication)))
             }
         }
     }
 
     fun undoDeleteMedicamento(medicamento: Medicamento) {
         viewModelScope.launch(Dispatchers.IO) {
+            _pendingArchiveIds.update { it - medicamento.id }
             medicationRepository.unarchiveMedicamento(dependentId, medicamento.id).onSuccess {
-                _doseTakenFeedback.postValue(Event("'${medicamento.nome}' foi restaurado."))
+                _doseTakenFeedback.postValue(Event(application.getString(R.string.medication_restored, medicamento.nome)))
             }
         }
     }
 
     fun permanentlyDeleteMedicamento(medicamento: Medicamento) {
         viewModelScope.launch(Dispatchers.IO) {
+            _pendingArchiveIds.update { it - medicamento.id }
             val result = medicationRepository.permanentlyDeleteMedicamento(dependentId, medicamento.id)
             if (result.isSuccess) {
                 activityLogRepository.saveLog(dependentId, "excluiu permanentemente o medicamento ${medicamento.nome}", TipoAtividade.MEDICAMENTO_EXCLUIDO)
@@ -369,38 +398,41 @@ class ListMedicamentosViewModel @Inject constructor(
             val updatedMedicamento = medicamento.copy(isPaused = !medicamento.isPaused)
             val result = medicationRepository.saveMedicamento(dependentId, updatedMedicamento)
             if(result.isSuccess){
-                val acao = if(updatedMedicamento.isPaused) "pausou" else "reativou"
+                val acao = if(updatedMedicamento.isPaused) application.getString(R.string.medication_action_paused) else application.getString(R.string.medication_action_resumed)
                 val tipoAtividade = if(updatedMedicamento.isPaused) TipoAtividade.TRATAMENTO_PAUSADO else TipoAtividade.TRATAMENTO_REATIVADO
-                activityLogRepository.saveLog(dependentId, "$acao os lembretes de ${medicamento.nome}", tipoAtividade)
+                activityLogRepository.saveLog(dependentId, application.getString(R.string.medication_action_log, acao, medicamento.nome), tipoAtividade)
             }
         }
     }
 
     fun generateShareableScheduleForToday(): String {
-        val medicationsUiState = _allMedicationsUiState.value ?: return "Nenhum medicamento para compartilhar."
+        val context = getApplication<Application>().applicationContext
+        val medicationsUiState = _allMedicationsUiState.value ?: return context.getString(R.string.no_meds_to_share)
         val medicationsForToday = medicationsUiState
             .filter { it.status != MedicamentoStatus.FINALIZADO && it.status != MedicamentoStatus.PAUSADO }
             .map { it.medicamento }
             .filter { it.horarios.isNotEmpty() }
-        val depName = _dependentName.value ?: "o paciente"
+        val depName = _dependentName.value ?: context.getString(R.string.share_patient_placeholder)
         val today = LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.forLanguageTag("pt-BR")))
         if (medicationsForToday.isEmpty()) {
-            return "Nenhum medicamento com horário agendado para hoje para $depName."
+            return context.getString(R.string.share_schedule_no_meds_today, depName)
         }
         val scheduleBuilder = StringBuilder()
-        scheduleBuilder.appendLine("🗓️ *Agenda de Medicamentos para $depName - $today*")
+        scheduleBuilder.appendLine(context.getString(R.string.share_schedule_header, depName, today))
         scheduleBuilder.appendLine("-----------------------------------")
         medicationsForToday
             .flatMap { med -> med.horarios.map { horario -> Pair(horario, med) } }
             .sortedBy { it.first }
             .forEach { (horario, med) ->
                 var doseInfo = med.dosagem
-                if (med.tipoDosagem != TipoDosagem.FIXA) {
-                    doseInfo = med.tipoDosagem.name.lowercase().replaceFirstChar { it.titlecase() }
+                if (med.tipoDosagem == TipoDosagem.MANUAL) {
+                    doseInfo = context.getString(R.string.share_dose_type_manual)
+                } else if (med.tipoDosagem == TipoDosagem.CALCULADA) {
+                    doseInfo = context.getString(R.string.share_dose_type_calculated)
                 }
                 scheduleBuilder.appendLine("⏰ *${horario.format(DateTimeFormatter.ofPattern("HH:mm"))}* - ${med.nome} ($doseInfo)")
             }
-        scheduleBuilder.appendLine("\n_Gerado por NidusCare_")
+        scheduleBuilder.appendLine(context.getString(R.string.share_schedule_footer))
         return scheduleBuilder.toString()
     }
 }

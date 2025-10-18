@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/listmedicamentos/ListMedicamentosFragment.kt
 package com.developersbeeh.medcontrol.ui.listmedicamentos
 
 import android.content.Intent
@@ -96,17 +95,16 @@ class ListMedicamentosFragment : Fragment() {
                 if (podeRegistrarDose) {
                     viewModel.markDoseAsTaken(uiState.medicamento, uiState)
                 } else {
-                    Toast.makeText(requireContext(), "Você não tem permissão para registrar doses.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), getString(R.string.permission_denied_register_doses), Toast.LENGTH_SHORT).show()
                 }
             },
             onPausePlayClick = { uiState -> viewModel.togglePauseState(uiState.medicamento) },
             onRefillClick = { uiState -> showRefillStockDialog(uiState.medicamento) },
-            // ✅ AÇÃO DE PULAR DOSE CONECTADA
             onSkipDoseClick = { uiState ->
                 if (podeRegistrarDose) {
                     showSkipDoseDialog(uiState.medicamento)
                 } else {
-                    Toast.makeText(requireContext(), "Você não tem permissão para pular doses.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), getString(R.string.permission_denied_skip_doses), Toast.LENGTH_SHORT).show()
                 }
             }
         )
@@ -132,12 +130,13 @@ class ListMedicamentosFragment : Fragment() {
     private fun observeViewModelEvents() {
         viewModel.dependentName.observe(viewLifecycleOwner) { name ->
             dependentName = name
-            (activity as? AppCompatActivity)?.supportActionBar?.title = "Medicamentos de $name"
-            binding.textViewDependentName.text = "Medicamentos de $name"
+            val title = getString(R.string.medications_of, name)
+            (activity as? AppCompatActivity)?.supportActionBar?.title = title
+            binding.textViewDependentName.text = title
         }
 
         viewModel.summaryText.observe(viewLifecycleOwner) { summary ->
-            if (summary.isNotBlank() && !summary.contains("Nenhuma tarefa")) {
+            if (summary.isNotBlank() && !summary.contains(getString(R.string.no_scheduled_tasks_today))) {
                 binding.cardSummary.visibility = View.VISIBLE
                 binding.textViewSummary.text = summary
             } else {
@@ -185,17 +184,16 @@ class ListMedicamentosFragment : Fragment() {
         }
     }
 
-    // ✅ NOVA FUNÇÃO PARA EXIBIR O DIÁLOGO DE PULAR DOSE
     private fun showSkipDoseDialog(medicamento: Medicamento) {
         val dialogBinding = DialogAddNoteEarlyDoseBinding.inflate(layoutInflater)
-        dialogBinding.tilNote.hint = "Motivo (opcional)"
-        dialogBinding.textViewMessage.text = "Tem certeza que deseja pular a próxima dose de '${medicamento.nome}'? Você pode adicionar um motivo abaixo."
+        dialogBinding.tilNote.hint = getString(R.string.reason_optional)
+        dialogBinding.textViewMessage.text = getString(R.string.skip_dose_message, medicamento.nome)
 
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Pular Dose?")
+            .setTitle(getString(R.string.skip_dose_title))
             .setView(dialogBinding.root)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Confirmar") { _, _ ->
+            .setNegativeButton(getString(R.string.cancel), null)
+            .setPositiveButton(getString(R.string.confirm)) { _, _ ->
                 val reason = dialogBinding.editTextNote.text.toString().trim().takeIf { it.isNotEmpty() }
                 viewModel.skipDose(medicamento, reason)
             }
@@ -216,17 +214,17 @@ class ListMedicamentosFragment : Fragment() {
 
     private fun showLateDoseLoggingDialog(event: DoseConfirmationEvent.ConfirmLateDoseLogging) {
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Registrar Dose Atrasada")
-            .setMessage("Você tomou este medicamento agora ou se esqueceu de registrar no horário?")
-            .setPositiveButton("Tomei Agora") { _, _ ->
+            .setTitle(getString(R.string.register_late_dose_title))
+            .setMessage(getString(R.string.register_late_dose_message))
+            .setPositiveButton(getString(R.string.register_late_dose_option_now)) { _, _ ->
                 viewModel.logLateDoseNow(event.medicamento, event.scheduledTime)
             }
-            .setNegativeButton("Esqueci de Registrar") { _, _ ->
+            .setNegativeButton(getString(R.string.register_late_dose_option_forgot)) { _, _ ->
                 val timePicker = MaterialTimePicker.Builder()
                     .setTimeFormat(TimeFormat.CLOCK_24H)
                     .setHour(event.scheduledTime.hour)
                     .setMinute(event.scheduledTime.minute)
-                    .setTitleText("Que horas você tomou?")
+                    .setTitleText(getString(R.string.register_late_dose_timepicker_title))
                     .build()
 
                 timePicker.addOnPositiveButtonClickListener {
@@ -236,7 +234,7 @@ class ListMedicamentosFragment : Fragment() {
                 }
                 timePicker.show(parentFragmentManager, "FORGOTTEN_DOSE_TIME_PICKER")
             }
-            .setNeutralButton("Cancelar", null)
+            .setNeutralButton(getString(R.string.cancel), null)
             .create()
             .show()
     }
@@ -244,23 +242,23 @@ class ListMedicamentosFragment : Fragment() {
     private fun showLateDoseDialog(event: DoseConfirmationEvent.ConfirmLateDose) {
         val plural = if (event.hoursLate > 1) "s" else ""
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Reajustar Horários?")
-            .setMessage("Você registrou esta dose com ${event.hoursLate} hora$plural de atraso. Deseja reajustar os próximos horários de hoje para '${event.medicamento.nome}' com base neste novo horário?")
-            .setNegativeButton("Não, manter") { dialog, _ -> dialog.dismiss() }
-            .setPositiveButton("Sim, reajustar") { _, _ -> viewModel.readjustSchedule(event.medicamento, event.lateDoseTime) }
+            .setTitle(getString(R.string.reschedule_title))
+            .setMessage(getString(R.string.reschedule_message, event.hoursLate, plural, event.medicamento.nome))
+            .setNegativeButton(getString(R.string.reschedule_option_no)) { dialog, _ -> dialog.dismiss() }
+            .setPositiveButton(getString(R.string.reschedule_option_yes)) { _, _ -> viewModel.readjustSchedule(event.medicamento, event.lateDoseTime) }
             .create()
             .show()
     }
 
     private fun showEarlyDoseReasonDialog(medicamento: Medicamento, nextDoseTimeToCancel: LocalDateTime) {
         val dialogBinding = DialogAddNoteEarlyDoseBinding.inflate(layoutInflater)
-        dialogBinding.tilNote.hint = "Motivo de adiantar (opcional)"
-        dialogBinding.textViewMessage.text = "Você está registrando uma dose de '${medicamento.nome}' antes do horário. Se desejar, adicione uma observação."
+        dialogBinding.tilNote.hint = getString(R.string.reason_early_dose_optional)
+        dialogBinding.textViewMessage.text = getString(R.string.register_early_dose_message, medicamento.nome)
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Registrar Dose Adiantada")
+            .setTitle(getString(R.string.register_early_dose_title))
             .setView(dialogBinding.root)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Confirmar") { _, _ ->
+            .setNegativeButton(getString(R.string.cancel), null)
+            .setPositiveButton(getString(R.string.confirm)) { _, _ ->
                 val reason = dialogBinding.editTextNote.text.toString()
                 viewModel.confirmEarlyDoseWithReason(medicamento, nextDoseTimeToCancel, reason)
             }
@@ -271,7 +269,7 @@ class ListMedicamentosFragment : Fragment() {
     private fun showSelectLocationDialog(medicamento: Medicamento, proximoLocalSugerido: String?, quantidade: Double?, glicemia: Double?, notas: String?) {
         val dialogBinding = DialogSelectLocationBinding.inflate(layoutInflater)
         val radioGroup = dialogBinding.radioGroupLocations
-        dialogBinding.textViewNextSuggested.text = proximoLocalSugerido?.let { "Sugestão: $it" } ?: "Selecione o local da aplicação:"
+        dialogBinding.textViewNextSuggested.text = proximoLocalSugerido?.let { "${getString(R.string.suggestion_prefix)}$it" } ?: getString(R.string.where_was_application)
         var selectedRadioButton: RadioButton? = null
         medicamento.locaisDeAplicacao.forEach { local ->
             val radioButton = RadioButton(context).apply { text = local; id = View.generateViewId(); textSize = 18f; tag = local }
@@ -285,10 +283,10 @@ class ListMedicamentosFragment : Fragment() {
             (radioGroup.getChildAt(0) as RadioButton).isChecked = true
         }
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Onde foi a aplicação?")
+            .setTitle(getString(R.string.where_was_application))
             .setView(dialogBinding.root)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Confirmar") { _, _ ->
+            .setNegativeButton(getString(R.string.cancel), null)
+            .setPositiveButton(getString(R.string.confirm)) { _, _ ->
                 val selectedId = radioGroup.checkedRadioButtonId
                 if (selectedId != -1) {
                     val checkedRadioButton = radioGroup.findViewById<RadioButton>(selectedId)
@@ -307,7 +305,7 @@ class ListMedicamentosFragment : Fragment() {
                 val glicemiaAtual = dialogBinding.editTextGlicemiaAtual.text.toString().toDoubleOrNull() ?: 0.0
                 val carboidratos = dialogBinding.editTextCarboidratos.text.toString().toDoubleOrNull() ?: 0.0
                 doseSugeridaFinal = viewModel.calculateInsulinDose(medicamento, glicemiaAtual, carboidratos)
-                dialogBinding.textViewDoseSugerida.text = "Dose Sugerida: $doseSugeridaFinal unidades"
+                dialogBinding.textViewDoseSugerida.text = "${getString(R.string.suggested_dose_prefix)}$doseSugeridaFinal${getString(R.string.suggested_dose_suffix)}"
             }
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
@@ -315,13 +313,13 @@ class ListMedicamentosFragment : Fragment() {
         dialogBinding.editTextGlicemiaAtual.addTextChangedListener(textWatcher)
         dialogBinding.editTextCarboidratos.addTextChangedListener(textWatcher)
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Calcular e Registrar Dose")
+            .setTitle(getString(R.string.calculate_and_register_dose))
             .setView(dialogBinding.root)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Próximo") { _, _ ->
+            .setNegativeButton(getString(R.string.cancel), null)
+            .setPositiveButton(R.string.next) { _, _ ->
                 val glicemiaAtual = dialogBinding.editTextGlicemiaAtual.text.toString().toDoubleOrNull()
                 if (glicemiaAtual == null) {
-                    Toast.makeText(context, "Por favor, insira a glicemia atual.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, getString(R.string.error_insert_current_glycemia), Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 viewModel.confirmDoseTaking(medicamento, null, doseSugeridaFinal.toDouble(), glicemiaAtual)
@@ -332,17 +330,17 @@ class ListMedicamentosFragment : Fragment() {
 
     private fun showManualDoseInputDialog(medicamento: Medicamento) {
         val dialogBinding = DialogManualDoseBinding.inflate(layoutInflater)
-        dialogBinding.tilQuantidadeAdministrada.hint = "Quantidade em ${medicamento.unidadeDeEstoque}"
+        dialogBinding.tilQuantidadeAdministrada.hint = getString(R.string.hint_quantity_in, medicamento.unidadeDeEstoque)
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Registrar Dose Manual")
-            .setMessage("Qual a quantidade de ${medicamento.nome} foi administrada?")
+            .setTitle(getString(R.string.register_manual_dose_title))
+            .setMessage(getString(R.string.register_manual_dose_message, medicamento.nome))
             .setView(dialogBinding.root)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Próximo") { _, _ ->
+            .setNegativeButton(getString(R.string.cancel), null)
+            .setPositiveButton(R.string.next) { _, _ ->
                 val quantidadeStr = dialogBinding.editTextQuantidadeAdministrada.text.toString()
                 val quantidade = quantidadeStr.toDoubleOrNull()
                 if (quantidade == null || quantidade <= 0) {
-                    Toast.makeText(context, "Por favor, insira uma quantidade válida.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, getString(R.string.error_invalid_quantity), Toast.LENGTH_SHORT).show()
                 } else {
                     viewModel.confirmDoseTaking(medicamento, null, quantidade)
                 }
@@ -383,12 +381,12 @@ class ListMedicamentosFragment : Fragment() {
 
     private fun showSporadicDoseDialog(event: DoseConfirmationEvent.ConfirmSporadicDose) {
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Registar Dose")
-            .setMessage("Deseja registrar uma dose de '${event.medicamento.nome}' agora?")
-            .setPositiveButton("Confirmar") { _, _ ->
+            .setTitle(getString(R.string.register_dose_title))
+            .setMessage(getString(R.string.register_dose_sporadic_message, event.medicamento.nome))
+            .setPositiveButton(getString(R.string.confirm)) { _, _ ->
                 viewModel.confirmSporadicDoseTaken(event.medicamento)
             }
-            .setNegativeButton("Cancelar", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .create()
             .show()
     }
@@ -396,12 +394,12 @@ class ListMedicamentosFragment : Fragment() {
     private fun showSlightlyEarlyDoseDialog(event: DoseConfirmationEvent.ConfirmSlightlyEarlyDose) {
         val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
         val nextDoseTimeFormatted = event.nextDoseTime.format(timeFormatter)
-        val message = "Você está registrando esta dose adiantado. O próximo lembrete agendado é às $nextDoseTimeFormatted.\n\nDeseja continuar?"
+        val message = getString(R.string.confirm_early_dose_message, nextDoseTimeFormatted)
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Confirmar Dose Adiantada?")
+            .setTitle(getString(R.string.confirm_early_dose_title))
             .setMessage(message)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Confirmar") { _, _ ->
+            .setNegativeButton(getString(R.string.cancel), null)
+            .setPositiveButton(getString(R.string.confirm)) { _, _ ->
                 viewModel.confirmDoseTaking(event.medicamento, event.nextDoseTime, null)
             }
             .create()
@@ -412,19 +410,19 @@ class ListMedicamentosFragment : Fragment() {
         val dialogBinding = DialogAddNoteEarlyDoseBinding.inflate(layoutInflater)
         val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
         val nextDoseTimeFormatted = event.nextDoseTime.format(timeFormatter)
-        dialogBinding.textViewMessage.text = "Atenção: A próxima dose de ${event.medicamento.nome} é só às $nextDoseTimeFormatted. Por favor, justifique o motivo de adiantar a dose."
+        dialogBinding.textViewMessage.text = getString(R.string.very_early_dose_message, event.medicamento.nome, nextDoseTimeFormatted)
         val dialog = MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Dose Muito Adiantada")
+            .setTitle(getString(R.string.very_early_dose_title))
             .setView(dialogBinding.root)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Confirmar", null)
+            .setNegativeButton(getString(R.string.cancel), null)
+            .setPositiveButton(getString(R.string.confirm), null)
             .create()
         dialog.setOnShowListener {
             val positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
             positiveButton.setOnClickListener {
                 val note = dialogBinding.editTextNote.text.toString().trim()
                 if (note.isEmpty() && event.noteRequired) {
-                    dialogBinding.tilNote.error = "A justificativa é obrigatória."
+                    dialogBinding.tilNote.error = getString(R.string.justification_required)
                 } else {
                     viewModel.confirmDoseWithNote(event.medicamento, event.nextDoseTime, note)
                     dialog.dismiss()
@@ -435,12 +433,12 @@ class ListMedicamentosFragment : Fragment() {
     }
 
     private fun showExtraDoseDialog(event: DoseConfirmationEvent.ConfirmExtraDose) {
-        val message = "Atenção: Você já registrou todas as doses de ${event.medicamento.nome} prescritas para hoje. Tomar uma dose adicional pode ser contrário à posologia indicada.\n\nDeseja registar esta dose extra?"
+        val message = getString(R.string.overdose_message, event.medicamento.nome)
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Dose Superior à Posologia?")
+            .setTitle(getString(R.string.overdose_title))
             .setMessage(message)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Confirmar") { _, _ ->
+            .setNegativeButton(getString(R.string.cancel), null)
+            .setPositiveButton(getString(R.string.confirm)) { _, _ ->
                 viewModel.confirmDoseTaking(event.medicamento, null, null)
             }
             .create()
@@ -470,7 +468,7 @@ class ListMedicamentosFragment : Fragment() {
     private fun showMedicamentoSelectionDialog() {
         val medicamentoNomes = medicamentos.map { it.nome }.toTypedArray()
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Qual dose foi tomada?")
+            .setTitle(getString(R.string.select_dose_title))
             .setItems(medicamentoNomes) { dialog, which ->
                 val medicamentoSelecionado = medicamentos[which]
                 val uiState = adapter.currentList.find { it.medicamento.id == medicamentoSelecionado.id }
@@ -479,7 +477,7 @@ class ListMedicamentosFragment : Fragment() {
                 }
                 dialog.dismiss()
             }
-            .setNegativeButton("Cancelar", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -492,12 +490,12 @@ class ListMedicamentosFragment : Fragment() {
         binding.recyclerViewMedicamentos.visibility = if (isEmpty) View.GONE else View.VISIBLE
         binding.emptyStateLayout.visibility = if (isEmpty) View.VISIBLE else View.GONE
         if (isEmpty) {
-            binding.emptyStateTitle.text = if (searchQuery.isBlank()) "Nenhum medicamento cadastrado" else "Nenhum resultado"
-            binding.emptyStateSubtitle.text = if (searchQuery.isBlank()) "Toque no botão 'Adicionar' para cadastrar seu primeiro medicamento" else "Não encontramos nenhum medicamento para '${searchQuery}'."
+            binding.emptyStateTitle.text = if (searchQuery.isBlank()) getString(R.string.no_meds_registered) else getString(R.string.no_search_results)
+            binding.emptyStateSubtitle.text = if (searchQuery.isBlank()) getString(R.string.no_meds_registered_subtitle) else getString(R.string.no_search_results_subtitle, searchQuery)
         }
         if (args.isCaregiver) {
             binding.fabAddMedicamento.visibility = View.VISIBLE
-            binding.fabAddMedicamento.text = "Adicionar"
+            binding.fabAddMedicamento.text = getString(R.string.fab_add)
             binding.fabAddMedicamento.icon = ContextCompat.getDrawable(requireContext(), R.drawable.ic_add)
             binding.fabAddMedicamento.setOnClickListener { navigateToAddMedicamento() }
             val shouldShowGuide = !userPreferences.hasSeenMedListGuide()
@@ -514,7 +512,7 @@ class ListMedicamentosFragment : Fragment() {
         } else {
             if (medicamentos.isNotEmpty() && userPreferences.temPermissao(PermissaoTipo.REGISTRAR_DOSE)) {
                 binding.fabAddMedicamento.visibility = View.VISIBLE
-                binding.fabAddMedicamento.text = "Registrar Dose"
+                binding.fabAddMedicamento.text = getString(R.string.fab_register_dose)
                 binding.fabAddMedicamento.icon = ContextCompat.getDrawable(requireContext(), R.drawable.ic_check_circle)
                 binding.fabAddMedicamento.setOnClickListener { showMedicamentoSelectionDialog() }
             } else {
@@ -527,7 +525,7 @@ class ListMedicamentosFragment : Fragment() {
         Handler(Looper.getMainLooper()).postDelayed({
             if (!isAdded) return@postDelayed
             val userPreferences = UserPreferences(requireContext())
-            TapTarget.forView(binding.fabAddMedicamento, "Comece por aqui", "Toque para adicionar o primeiro medicamento para ${dependentName}.")
+            TapTarget.forView(binding.fabAddMedicamento, getString(R.string.guide_empty_list_title), getString(R.string.guide_empty_list_subtitle, dependentName))
                 .outerCircleColor(R.color.md_theme_primary)
                 .targetCircleColor(R.color.white)
                 .textColor(R.color.white)
@@ -554,15 +552,9 @@ class ListMedicamentosFragment : Fragment() {
             val userPreferences = UserPreferences(requireContext())
             val toolbar = activity?.findViewById<Toolbar>(R.id.toolbar)
             val targets = mutableListOf<TapTarget>()
+
             targets.add(
-                TapTarget.forView(itemView.findViewById(R.id.buttonMarkAsTaken), "Marcar como Tomado", "Quando o horário da dose chegar, toque aqui para registrar que ela foi administrada.")
-                    .outerCircleColor(R.color.md_theme_primary)
-                    .targetCircleColor(R.color.white)
-                    .textColor(R.color.white)
-                    .cancelable(false)
-            )
-            targets.add(
-                TapTarget.forView(itemView, "Ver Detalhes", "Toque no card a qualquer momento para expandir e ver mais detalhes, como estoque e anotações.")
+                TapTarget.forView(itemView, getString(R.string.guide_first_med_details), getString(R.string.guide_first_med_details_subtitle))
                     .outerCircleColor(R.color.md_theme_primary)
                     .targetCircleColor(R.color.white)
                     .textColor(R.color.white)
@@ -580,10 +572,10 @@ class ListMedicamentosFragment : Fragment() {
 
     private fun showDeleteConfirmationDialog(medicamento: Medicamento) {
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Confirmar Exclusão")
-            .setMessage("Deseja realmente excluir '${medicamento.nome}'? Todas as suas notificações serão canceladas.")
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Excluir") { _, _ ->
+            .setTitle(getString(R.string.delete_confirmation_title))
+            .setMessage(getString(R.string.delete_confirmation_message, medicamento.nome))
+            .setNegativeButton(getString(R.string.cancel), null)
+            .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 viewModel.deleteMedicamento(medicamento)
             }
             .create()
@@ -591,9 +583,9 @@ class ListMedicamentosFragment : Fragment() {
     }
 
     private fun showUndoSnackbar(medicamento: Medicamento) {
-        Snackbar.make(binding.root, "'${medicamento.nome}' excluído.", Snackbar.LENGTH_LONG)
+        Snackbar.make(binding.root, getString(R.string.deleted_snackbar_message, medicamento.nome), Snackbar.LENGTH_LONG)
             .setAnchorView(binding.fabAddMedicamento)
-            .setAction("DESFAZER") {
+            .setAction(getString(R.string.undo)) {
                 viewModel.undoDeleteMedicamento(medicamento)
             }
             .addCallback(object : Snackbar.Callback() {
@@ -613,18 +605,18 @@ class ListMedicamentosFragment : Fragment() {
             putExtra(Intent.EXTRA_TEXT, scheduleText)
             type = "text/plain"
         }
-        val shareIntent = Intent.createChooser(sendIntent, "Compartilhar agenda de hoje")
+        val shareIntent = Intent.createChooser(sendIntent, getString(R.string.share_schedule_title))
         startActivity(shareIntent)
     }
 
     private fun showRefillStockDialog(medicamento: Medicamento) {
         val dialogBinding = DialogRefillStockBinding.inflate(LayoutInflater.from(context))
-        dialogBinding.tilRefillAmount.hint = "Adicionar (em ${medicamento.unidadeDeEstoque})"
+        dialogBinding.tilRefillAmount.hint = getString(R.string.refill_stock_hint, medicamento.unidadeDeEstoque)
         val dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
         var selectedDate: LocalDate? = null
         dialogBinding.editTextExpirationDate.setOnClickListener {
             val datePicker = MaterialDatePicker.Builder.datePicker()
-                .setTitleText("Selecione a Data de Validade")
+                .setTitleText(getString(R.string.select_expiration_date))
                 .setSelection(MaterialDatePicker.todayInUtcMilliseconds())
                 .build()
             datePicker.addOnPositiveButtonClickListener { selection ->
@@ -634,18 +626,18 @@ class ListMedicamentosFragment : Fragment() {
             datePicker.show(childFragmentManager, "EXPIRATION_DATE_PICKER_REFILL")
         }
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Repor Estoque de ${medicamento.nome}")
+            .setTitle(getString(R.string.refill_stock_title, medicamento.nome))
             .setView(dialogBinding.root)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Adicionar") { _, _ ->
+            .setNegativeButton(getString(R.string.cancel), null)
+            .setPositiveButton(R.string.add) { _, _ ->
                 val amountStr = dialogBinding.editTextRefillAmount.text.toString().replace(',', '.')
                 val amount = amountStr.toDoubleOrNull()
                 if (amount == null || amount <= 0) {
-                    Toast.makeText(context, "Quantidade inválida.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, getString(R.string.invalid_quantity), Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 if (selectedDate == null) {
-                    Toast.makeText(context, "Selecione a data de validade.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, getString(R.string.select_date), Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 val novoLote = EstoqueLote(
@@ -654,7 +646,7 @@ class ListMedicamentosFragment : Fragment() {
                     dataValidadeString = selectedDate!!.format(DateTimeFormatter.ISO_LOCAL_DATE)
                 )
                 viewModel.addStockLot(medicamento, novoLote)
-                Toast.makeText(context, "Estoque atualizado!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, getString(R.string.stock_updated), Toast.LENGTH_SHORT).show()
             }
             .create()
             .show()

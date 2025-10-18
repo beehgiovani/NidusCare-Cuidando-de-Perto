@@ -2,6 +2,7 @@ package com.developersbeeh.medcontrol.data.repository
 
 import android.content.Context
 import android.util.Log
+import com.developersbeeh.medcontrol.R
 import com.developersbeeh.medcontrol.data.model.Conquista
 import com.developersbeeh.medcontrol.data.model.DoseHistory
 import com.developersbeeh.medcontrol.data.model.EstoqueLote
@@ -39,14 +40,13 @@ class MedicationRepository @Inject constructor(
     private fun getMedicamentosCollection(dependentId: String) =
         db.collection("dependentes").document(dependentId).collection("medicamentos")
 
-    // ✅ CORREÇÃO: Função agora é pública
     fun getCurrentUserId(): String? {
         return auth.currentUser?.uid
     }
 
     fun getMedicamentos(dependentId: String): Flow<List<Medicamento>> = callbackFlow {
         if (dependentId.isBlank()) {
-            close(InvalidIdException("ID do dependente é inválido."))
+            close(InvalidIdException(context.getString(R.string.error_invalid_dependent_id)))
             return@callbackFlow
         }
 
@@ -62,7 +62,10 @@ class MedicationRepository @Inject constructor(
     }
 
     fun getArchivedMedicamentos(dependentId: String): Flow<List<Medicamento>> = callbackFlow {
-        if (dependentId.isBlank()) { close(InvalidIdException("ID do dependente é inválido.")); return@callbackFlow }
+        if (dependentId.isBlank()) {
+            close(InvalidIdException(context.getString(R.string.error_invalid_dependent_id)))
+            return@callbackFlow
+        }
 
         val listener = getMedicamentosCollection(dependentId)
             .whereEqualTo("isArchived", true)
@@ -79,27 +82,28 @@ class MedicationRepository @Inject constructor(
             getMedicamentosCollection(dependentId).document(medicamentoId)
                 .get().await().toObject(Medicamento::class.java)
         } catch (e: Exception) {
-            Log.e(TAG, "Erro ao buscar medicamento '$medicamentoId': ${e.message}", e)
+            Log.e(TAG, context.getString(R.string.error_fetching_medication, medicamentoId, e.message), e)
             null
         }
     }
 
     suspend fun saveMedicamento(dependentId: String, medicamento: Medicamento): Result<Unit> {
         val userId = getCurrentUserId() ?: return Result.failure(UserNotAuthenticatedException())
-        if (dependentId.isBlank()) return Result.failure(InvalidIdException("O ID do dependente é inválido."))
+        if (dependentId.isBlank()) return Result.failure(InvalidIdException(context.getString(R.string.error_invalid_dependent_id)))
         val updatedMedicamento = medicamento.copy(userId = userId)
         return try {
             getMedicamentosCollection(dependentId).document(updatedMedicamento.id)
                 .set(updatedMedicamento).await()
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(TAG, "Erro ao salvar medicamento: ${e.message}", e)
-            Result.failure(e)
+            val errorMsg = context.getString(R.string.error_saving_medication, e.message)
+            Log.e(TAG, errorMsg, e)
+            Result.failure(Exception(errorMsg, e))
         }
     }
 
     suspend fun archiveMedicamento(dependentId: String, medicamentoId: String): Result<Unit> {
-        if (medicamentoId.isBlank()) return Result.failure(InvalidIdException("ID do medicamento é inválido."))
+        if (medicamentoId.isBlank()) return Result.failure(InvalidIdException(context.getString(R.string.error_invalid_medication_id)))
         return try {
             getMedicamentosCollection(dependentId).document(medicamentoId).update("isArchived", true).await()
             Result.success(Unit)
@@ -109,7 +113,7 @@ class MedicationRepository @Inject constructor(
     }
 
     suspend fun unarchiveMedicamento(dependentId: String, medicamentoId: String): Result<Unit> {
-        if (medicamentoId.isBlank()) return Result.failure(InvalidIdException("ID do medicamento é inválido."))
+        if (medicamentoId.isBlank()) return Result.failure(InvalidIdException(context.getString(R.string.error_invalid_medication_id)))
         return try {
             getMedicamentosCollection(dependentId).document(medicamentoId).update("isArchived", false).await()
             Result.success(Unit)
@@ -119,7 +123,7 @@ class MedicationRepository @Inject constructor(
     }
 
     suspend fun permanentlyDeleteMedicamento(dependentId: String, medicamentoId: String): Result<Unit> {
-        if (medicamentoId.isBlank()) return Result.failure(InvalidIdException("ID do medicamento é inválido."))
+        if (medicamentoId.isBlank()) return Result.failure(InvalidIdException(context.getString(R.string.error_invalid_medication_id)))
         return try {
             getMedicamentosCollection(dependentId).document(medicamentoId).delete().await()
             Result.success(Unit)
@@ -129,12 +133,12 @@ class MedicationRepository @Inject constructor(
     }
 
     suspend fun addStockLot(dependentId: String, medId: String, newLot: EstoqueLote): Result<Unit> {
-        if (dependentId.isBlank() || medId.isBlank()) return Result.failure(InvalidIdException("IDs inválidos."))
+        if (dependentId.isBlank() || medId.isBlank()) return Result.failure(InvalidIdException(context.getString(R.string.error_invalid_ids)))
         val medRef = getMedicamentosCollection(dependentId).document(medId)
         return try {
             db.runTransaction { transaction ->
                 val medOnDb = transaction.get(medRef).toObject(Medicamento::class.java)
-                    ?: throw Exception("Medicamento não encontrado.")
+                    ?: throw Exception(context.getString(R.string.error_medication_not_found))
                 val updatedLotes = medOnDb.lotes.toMutableList().apply { add(newLot) }
                 val updates = hashMapOf<String, Any>("lotes" to updatedLotes)
                 if (medOnDb.alertaDeEstoqueEnviado) {
@@ -144,14 +148,15 @@ class MedicationRepository @Inject constructor(
             }.await()
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(TAG, "Erro ao adicionar lote de estoque: ${e.message}", e)
-            Result.failure(e)
+            val errorMsg = context.getString(R.string.error_adding_stock_lot, e.message)
+            Log.e(TAG, errorMsg, e)
+            Result.failure(Exception(errorMsg, e))
         }
     }
 
     fun getDoseHistory(dependentId: String): Flow<List<DoseHistory>> = callbackFlow {
         if (dependentId.isBlank()) {
-            close(InvalidIdException("ID do dependente é inválido."))
+            close(InvalidIdException(context.getString(R.string.error_invalid_dependent_id)))
             return@callbackFlow
         }
         val listener = db.collection("dependentes").document(dependentId)
@@ -176,7 +181,7 @@ class MedicationRepository @Inject constructor(
         doseTime: LocalDateTime = LocalDateTime.now()
     ): Result<Unit> {
         val currentUserId = getCurrentUserId() ?: "dependent_user"
-        if (dependentId.isBlank()) return Result.failure(InvalidIdException("ID do dependente é inválido."))
+        if (dependentId.isBlank()) return Result.failure(InvalidIdException(context.getString(R.string.error_invalid_dependent_id)))
 
         val doseHistory = DoseHistory(
             medicamentoId = medicamento.id,
@@ -193,7 +198,7 @@ class MedicationRepository @Inject constructor(
             val medRef = getMedicamentosCollection(dependentId).document(medicamento.id)
             db.runTransaction { transaction ->
                 val medOnDb = transaction.get(medRef).toObject(Medicamento::class.java)
-                    ?: throw Exception("Medicamento não encontrado.")
+                    ?: throw Exception(context.getString(R.string.error_medication_not_found))
                 val historyRef = db.collection("dependentes").document(dependentId).collection("historico_doses").document()
                 transaction.set(historyRef, doseHistory)
 
@@ -227,36 +232,17 @@ class MedicationRepository @Inject constructor(
             checkAndAwardDoseCountAchievements(dependentId)
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(TAG, "Erro ao registrar dose e atualizar estoque: ${e.message}", e)
-            Result.failure(e)
+            val errorMsg = context.getString(R.string.error_recording_dose, e.message)
+            Log.e(TAG, errorMsg, e)
+            Result.failure(Exception(errorMsg, e))
         }
     }
 
-    suspend fun recordDoseAsSkipped(dependentId: String, medicamento: Medicamento, notas: String, scheduledTime: LocalDateTime): Result<Unit> {
-        val currentUserId = auth.currentUser?.uid ?: "system_user"
-
-        val doseHistory = DoseHistory(
-            medicamentoId = medicamento.id,
-            userId = currentUserId,
-            notas = notas,
-        ).apply {
-            timestamp = scheduledTime
-            status = RecordedDoseStatus.SKIPPED
-        }
-
-        return try {
-            db.collection("dependentes").document(dependentId)
-                .collection("historico_doses").add(doseHistory).await()
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e("MedicationRepository", "Erro ao registrar dose como pulada", e)
-            Result.failure(e)
-        }
-    }
+    // ✅ REMOVIDO: Função duplicada 'recordDoseAsSkipped' foi removida.
 
     suspend fun recordSkippedDose(dependentId: String, medicamento: Medicamento, reason: String?, scheduledTime: LocalDateTime): Result<Unit> {
         val currentUserId = getCurrentUserId() ?: "system_user"
-        if (dependentId.isBlank()) return Result.failure(InvalidIdException("ID do dependente é inválido."))
+        if (dependentId.isBlank()) return Result.failure(InvalidIdException(context.getString(R.string.error_invalid_dependent_id)))
 
         val doseHistory = DoseHistory(
             medicamentoId = medicamento.id,
@@ -275,10 +261,11 @@ class MedicationRepository @Inject constructor(
             scheduler.cancelMissedDoseFollowUp(medicamento.id)
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e("MedicationRepository", "Erro ao registrar dose como pulada", e)
+            Log.e(TAG, context.getString(R.string.error_recording_skipped_dose), e)
             Result.failure(e)
         }
     }
+
     private suspend fun checkAndAwardDoseCountAchievements(dependentId: String) {
         try {
             val doseCount = db.collection("dependentes").document(dependentId)
@@ -294,7 +281,7 @@ class MedicationRepository @Inject constructor(
                 achievementRepository.awardAchievement(dependentId, Conquista(id = TipoConquista.CEM_DOSES_REGISTRADAS.name, tipo = TipoConquista.CEM_DOSES_REGISTRADAS))
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Falha ao verificar conquistas de contagem de doses: ${e.message}", e)
+            Log.e(TAG, context.getString(R.string.error_checking_achievements, e.message), e)
         }
     }
 }

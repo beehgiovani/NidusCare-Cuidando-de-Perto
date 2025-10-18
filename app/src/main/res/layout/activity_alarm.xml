@@ -4,62 +4,89 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?attr/colorPrimary"
+    android:background="?attr/colorPrimaryContainer"
     tools:context=".notifications.AlarmActivity">
 
     <ImageView
-        android:id="@+id/imageViewAlarmIcon"
-        android:layout_width="120dp"
-        android:layout_height="120dp"
+        android:id="@+id/iconAlarm"
+        android:layout_width="96dp"
+        android:layout_height="96dp"
         android:layout_marginBottom="32dp"
-        app:layout_constraintBottom_toTopOf="@id/textViewDependentName"
+        android:src="@drawable/ic_alarm"
+        app:layout_constraintBottom_toTopOf="@+id/textViewMedicationInfo"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:srcCompat="@drawable/ic_alarm_on"
-        app:tint="@color/white" />
-
-    <TextView
-        android:id="@+id/textViewDependentName"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textAppearance="?attr/textAppearanceHeadlineMedium"
-        android:textColor="@color/white"
-        app:layout_constraintBottom_toTopOf="@id/guideline_center"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        tools:text="Hora do Medicamento: João Silva" />
-
-    <androidx.constraintlayout.widget.Guideline
-        android:id="@+id/guideline_center"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        app:layout_constraintGuide_percent="0.5" />
+        app:tint="?attr/colorOnPrimaryContainer" />
 
     <TextView
         android:id="@+id/textViewMedicationInfo"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
         android:layout_marginHorizontal="32dp"
-        android:textAlignment="center"
-        android:textAppearance="?attr/textAppearanceTitleLarge"
-        android:textColor="@color/white"
+        android:gravity="center"
+        android:textAppearance="?attr/textAppearanceHeadlineMedium"
+        android:textColor="?attr/colorOnPrimaryContainer"
+        android:textStyle="bold"
+        app:layout_constraintBottom_toTopOf="@+id/textViewDependentName"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/guideline_center"
         tools:text="É hora de tomar Paracetamol 500mg" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/buttonDismiss"
-        style="@style/Widget.Material3.Button.TonalButton"
-        android:layout_width="wrap_content"
+    <TextView
+        android:id="@+id/textViewDependentName"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginBottom="64dp"
-        android:text="OK"
-        app:icon="@drawable/ic_check"
+        android:gravity="center"
+        android:textAppearance="?attr/textAppearanceTitleMedium"
+        android:textColor="?attr/colorOnPrimaryContainer"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:text="Para: Giovani" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="32dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/buttonMarkAsTaken"
+            style="@style/Widget.Material3.Button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/take_now"
+            app:icon="@drawable/ic_check_circle" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/buttonSnooze"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/snooze_15_min" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/buttonSkip"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/skip_dose"
+                android:textColor="?attr/colorError" />
+        </LinearLayout>
+
+    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

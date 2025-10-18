@@ -30,46 +30,46 @@ class TimelineViewModel @Inject constructor(
     private val _filter = MutableStateFlow(TimelineFilter.ALL)
     private val _dependentId = MutableStateFlow<String?>(null)
 
-    // ✅ ALTERAÇÃO: A UI agora consome um Flow de PagingData
+    // ✅ CORREÇÃO: O fluxo de paginação agora combina o ID do dependente E o filtro.
+    // flatMapLatest cancela a busca anterior e inicia uma nova sempre que o ID ou o filtro mudam.
     @OptIn(ExperimentalCoroutinesApi::class)
-    val timelinePagerFlow: Flow<PagingData<TimelineListItem>> = _dependentId.filterNotNull().flatMapLatest { id ->
-        firestoreRepository.getTimelinePager(id).flow
-    }.map { pagingData ->
-        pagingData.map { event ->
-            // Mapeia o TimelineEvent bruto para o nosso item de UI
-            event.toTimelineLogItem()
-        }
-    }.map { pagingData ->
-        // Insere os separadores (cabeçalhos de data)
-        pagingData.insertSeparators { before, after ->
-            if (after == null) {
-                // Fim da lista
-                return@insertSeparators null
+    val timelinePagerFlow: Flow<PagingData<TimelineListItem>> =
+        combine(_dependentId.filterNotNull(), _filter) { id, filter ->
+            // Este Pair (id, filter) será emitido sempre que qualquer um dos dois mudar
+            Pair(id, filter)
+        }.flatMapLatest { (id, filter) ->
+            // O repositório agora é chamado com o filtro, que criará uma nova PagingSource
+            firestoreRepository.getTimelinePager(id, filter).flow
+        }.map { pagingData ->
+            pagingData.map { event ->
+                // Mapeia o TimelineEvent bruto para o nosso item de UI
+                event.toTimelineLogItem()
             }
-            if (before == null) {
-                // Início da lista
-                return@insertSeparators TimelineListItem.HeaderItem(after.log.timestamp.toLocalDate())
+        }.map { pagingData ->
+            // Insere os separadores (cabeçalhos de data)
+            pagingData.insertSeparators { before, after ->
+                if (after == null) {
+                    return@insertSeparators null
+                }
+                val beforeDate = (before as? TimelineListItem.LogItem)?.log?.timestamp?.toLocalDate()
+                val afterDate = (after as? TimelineListItem.LogItem)?.log?.timestamp?.toLocalDate()
+
+                if (beforeDate != afterDate) {
+                    TimelineListItem.HeaderItem(afterDate!!)
+                } else {
+                    null
+                }
             }
-            if (before.log.timestamp.toLocalDate() != after.log.timestamp.toLocalDate()) {
-                // Insere o cabeçalho quando a data muda
-                TimelineListItem.HeaderItem(after.log.timestamp.toLocalDate())
-            } else {
-                null
-            }
-        }
-    }.cachedIn(viewModelScope) // Cacheia os resultados no ViewModelScope
+        }.cachedIn(viewModelScope) // Cacheia os resultados no ViewModelScope
 
     fun initialize(dependentId: String) {
         if (_dependentId.value == dependentId) return
         _dependentId.value = dependentId
     }
 
-    // A função de reload agora não é mais necessária, o PagingAdapter tem seu próprio método refresh()
-
     fun setFilter(filter: TimelineFilter) {
-        // A lógica de filtro agora precisará ser aplicada no PagingSource ou após o carregamento.
-        // Por simplicidade inicial, removeremos o filtro do backend e o faremos no cliente se necessário.
-        // A implementação atual não filtra, mas o mecanismo está aqui.
+        // ✅ CORREÇÃO: Atualizar este valor agora aciona automaticamente
+        // a recarga do timelinePagerFlow graças ao 'combine'.
         _filter.value = filter
     }
 

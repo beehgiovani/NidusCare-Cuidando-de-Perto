@@ -149,4 +149,126 @@
     <string name="active_ingredient">Princípio Ativo</string>
     <string name="lot_number">Lote</string>
 
+
+    <string name="medications_of">Medicamentos de %1$s</string>
+    <string name="permission_denied_register_doses">Você não tem permissão para registrar doses.</string>
+    <string name="permission_denied_skip_doses">Você não tem permissão para pular doses.</string>
+    <string name="no_scheduled_tasks_today">Nenhuma tarefa programada para hoje.</string>
+    <string name="today_you_have_summary">Hoje você tem %1$s</string>
+    <string name="today_you_have_summary_plural">Hoje você tem %1$s e %2$s</string>
+    <string name="doses_singular">%1$d dose</string>
+    <string name="doses_plural">%1$d doses</string>
+    <string name="reminders_singular">%1$d lembrete</string>
+    <string name="reminders_plural">%1$d lembretes</string>
+    <string name="dose_skipped_success">Dose de %1$s das %2$s foi pulada.</string>
+    <string name="dose_skipped_fail">Falha ao registrar a dose pulada.</string>
+    <string name="skip_dose_title">Pular Dose?</string>
+    <string name="skip_dose_message">Tem certeza que deseja pular a próxima dose de \'%1$s\'? Você pode adicionar um motivo abaixo.</string>
+    <string name="reason_optional">Motivo (opcional)</string>
+    <string name="confirm">Confirmar</string>
+    <string name="register_late_dose_title">Registrar Dose Atrasada</string>
+    <string name="register_late_dose_message">Você tomou este medicamento agora ou se esqueceu de registrar no horário?</string>
+    <string name="register_late_dose_option_now">Tomei Agora</string>
+    <string name="register_late_dose_option_forgot">Esqueci de Registrar</string>
+    <string name="register_late_dose_timepicker_title">Que horas você tomou?</string>
+    <string name="reschedule_title">Reajustar Horários?</string>
+    <string name="reschedule_message">Você registrou esta dose com %1$d hora%2$s de atraso. Deseja reajustar os próximos horários de hoje para \'%3$s\' com base neste novo horário?</string>
+    <string name="reschedule_option_no">Não, manter</string>
+    <string name="reschedule_option_yes">Sim, reajustar</string>
+    <string name="register_early_dose_title">Registrar Dose Adiantada</string>
+    <string name="register_early_dose_message">Você está registrando uma dose de \'%1$s\' antes do horário. Se desejar, adicione uma observação.</string>
+    <string name="reason_early_dose_optional">Motivo de adiantar (opcional)</string>
+    <string name="where_was_application">Onde foi a aplicação?</string>
+    <string name="suggestion_prefix">Sugestão: </string>
+    <string name="calculate_and_register_dose">Calcular e Registrar Dose</string>
+    <string name="error_insert_current_glycemia">Por favor, insira a glicemia atual.</string>
+    <string name="suggested_dose_prefix">Dose Sugerida: </string>
+    <string name="suggested_dose_suffix"> unidades</string>
+    <string name="register_manual_dose_title">Registrar Dose Manual</string>
+    <string name="register_manual_dose_message">Qual a quantidade de %1$s foi administrada?</string>
+    <string name="hint_quantity_in">Quantidade em %1$s</string>
+    <string name="error_invalid_quantity">Por favor, insira uma quantidade válida.</string>
+    <string name="register_dose_title">Registar Dose</string>
+    <string name="register_dose_sporadic_message">Deseja registrar uma dose de \'%1$s\' agora?</string>
+    <string name="confirm_early_dose_title">Confirmar Dose Adiantada?</string>
+    <string name="confirm_early_dose_message">Você está registrando esta dose adiantado. O próximo lembrete agendado é às %1$s.\n\nDeseja continuar?</string>
+    <string name="very_early_dose_title">Dose Muito Adiantada</string>
+    <string name="very_early_dose_message">Atenção: A próxima dose de %1$s é só às %2$s. Por favor, justifique o motivo de adiantar a dose.</string>
+    <string name="justification_required">A justificativa é obrigatória.</string>
+    <string name="overdose_title">Dose Superior à Posologia?</string>
+    <string name="overdose_message">Atenção: Você já registrou todas as doses de %1$s prescritas para hoje. Tomar uma dose adicional pode ser contrário à posologia indicada.\n\nDeseja registar esta dose extra?</string>
+    <string name="delete_confirmation_title">Confirmar Exclusão</string>
+    <string name="delete_confirmation_message">Deseja realmente excluir \'%1$s\'? Todas as suas notificações serão canceladas.</string>
+    <string name="deleted_snackbar_message">\'%1$s\' excluído.</string>
+    <string name="undo">DESFAZER</string>
+    <string name="medication_restored">\'%1$s\' foi restaurado.</string>
+    <string name="share_schedule_title">Compartilhar agenda de hoje</string>
+    <string name="share_schedule_header">🗓️ *Agenda de Medicamentos para %1$s - %2$s*</string>
+    <string name="share_schedule_no_meds_today">Nenhum medicamento com horário agendado para hoje para %1$s.</string>
+    <string name="share_schedule_footer">\n_Gerado por NidusCare_</string>
+    <string name="refill_stock_title">Repor Estoque de %1$s</string>
+    <string name="refill_stock_hint">Adicionar (em %1$s)</string>
+    <string name="select_expiration_date">Selecione a Data de Validade</string>
+    <string name="invalid_quantity">Quantidade inválida.</string>
+    <string name="select_date">Selecione a data de validade.</string>
+    <string name="stock_updated">Estoque atualizado!</string>
+    <string name="guide_empty_list_title">Comece por aqui</string>
+    <string name="guide_empty_list_subtitle">Toque para adicionar o primeiro medicamento para %1$s.</string>
+    <string name="guide_first_med_details">Ver Detalhes</string>
+    <string name="guide_first_med_details_subtitle">Toque no card a qualquer momento para expandir e ver mais detalhes, como estoque e anotações.</string>
+    <string name="no_meds_registered">Nenhum medicamento cadastrado</string>
+    <string name="no_meds_registered_subtitle">Toque no botão "Adicionar" para cadastrar seu primeiro medicamento</string>
+    <string name="no_search_results">Nenhum resultado</string>
+    <string name="no_search_results_subtitle">Não encontramos nenhum medicamento para \'%1$s\'.</string>
+    <string name="fab_add">Adicionar</string>
+    <string name="fab_register_dose">Registrar Dose</string>
+    <string name="select_dose_title">Qual dose foi tomada?</string>
+
+
+    <string name="next">Próximo</string>
+    <string name="add">Adicionar</string>
+
+
+    <string name="error_invalid_dependent_id">ID do dependente é inválido.</string>
+    <string name="error_medication_not_found">Medicamento não encontrado.</string>
+    <string name="error_fetching_medication">Erro ao buscar medicamento \'%1$s\': %2$s</string>
+    <string name="error_saving_medication">Erro ao salvar medicamento: %1$s</string>
+    <string name="error_invalid_medication_id">ID do medicamento é inválido.</string>
+    <string name="error_invalid_ids">IDs inválidos.</string>
+    <string name="error_adding_stock_lot">Erro ao adicionar lote de estoque: %1$s</string>
+    <string name="error_recording_dose">Erro ao registrar dose e atualizar estoque: %1$s</string>
+    <string name="error_recording_skipped_dose">Erro ao registrar dose como pulada</string>
+    <string name="error_checking_achievements">Falha ao verificar conquistas de contagem de doses: %1$s</string>
+
+    <string name="take_now">Tomar Agora</string>
+    <string name="snooze_15_min">Adiar 15 min</string>
+    <string name="skip_dose">Pular Dose</string>
+
+
+
+    <string name="treatment_finished_feedback">O tratamento para este medicamento já foi finalizado.</string>
+    <string name="cannot_register_dose_now">Não é possível registrar dose para este medicamento no momento.</string>
+    <string name="no_dose_to_skip">Não há uma dose programada para pular.</string>
+
+    <string name="med_schedule_adjusted">Horários de \'%1$s\' foram reajustados para hoje.</string>
+    <string name="schedule_adjust_fail">Falha ao reajustar horários.</string>
+    <string name="dose_recorded_advanced_with_reason">Motivo (adiantado): %1$s</string>
+    <string name="dose_recorded_advanced">Dose registrada adiantada.</string>
+    <string name="dose_recorded_very_advanced_with_reason">Motivo (muito adiantado): %1$s</string>
+    <string name="dose_recorded_very_advanced">Dose registrada muito adiantada.</string>
+    <string name="error_fetching_history">Erro ao buscar histórico.</string>
+    <string name="dose_info_registered">%1$s de \'%2$s\' registrada%3$s</string>
+    <string name="dose_info_registered_default">1 dose</string>
+    <string name="dose_info_registered_location"> em \'%1$s\'</string>
+    <string name="dose_registration_fail">Falha ao registrar a dose.</string>
+    <string name="note_auto_glycemia">Registrado automaticamente com a dose de %1$s.</string>
+    <string name="error_deleting_medication">Erro ao excluir medicamento.</string>
+    <string name="medication_action_log">\'%1$s\' os lembretes de %2$s</string>
+    <string name="medication_action_paused">pausou</string>
+    <string name="medication_action_resumed">reativou</string>
+    <string name="no_meds_to_share">Nenhum medicamento para compartilhar.</string>
+    <string name="share_patient_placeholder">o paciente</string>
+    <string name="share_dose_type_manual">Manual</string>
+    <string name="share_dose_type_calculated">Calculada</string>
+
 </resources>

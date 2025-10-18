@@ -7,6 +7,7 @@ import androidx.paging.cachedIn
 import androidx.paging.insertSeparators
 import androidx.paging.map
 import com.developersbeeh.medcontrol.data.model.Medicamento
+import com.developersbeeh.medcontrol.data.model.RecordedDoseStatus
 import com.developersbeeh.medcontrol.data.repository.FirestoreRepository
 import com.developersbeeh.medcontrol.data.repository.MedicationRepository
 import com.developersbeeh.medcontrol.util.CalculatedDoseStatus
@@ -47,13 +48,17 @@ class DoseHistoryViewModel @Inject constructor(
                         val med = _allMedications.value.find { it.id == dose.medicamentoId }
                         val medName = med?.nome ?: "Medicamento"
 
+                        // ✅ CORREÇÃO: A lógica agora checa o status 'SKIPPED' do DB
                         val calculatedStatus = if (med != null) {
-                            DoseStatusCalculator.calculateDoseStatus(dose, med, allDoses)
+                            if (dose.status == RecordedDoseStatus.SKIPPED) {
+                                CalculatedDoseStatus.SKIPPED
+                            } else {
+                                DoseStatusCalculator.calculateDoseStatus(dose, med, allDoses)
+                            }
                         } else {
                             CalculatedDoseStatus.SPORADIC
                         }
 
-                        // ✅ CORREÇÃO: Criamos o DoseItem com o status calculado, sem modificar a dose original.
                         DoseHistoryListItem.DoseItem(dose, medName, calculatedStatus)
                     }
                 }

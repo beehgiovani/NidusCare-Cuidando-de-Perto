@@ -18,7 +18,6 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 sealed class DoseHistoryListItem {
-    // ✅ CORREÇÃO: Adicionado o campo para o status calculado
     data class DoseItem(val dose: DoseHistory, val medName: String, val calculatedStatus: CalculatedDoseStatus) : DoseHistoryListItem()
     data class HeaderItem(val date: LocalDate) : DoseHistoryListItem()
 }
@@ -81,26 +80,39 @@ class DoseHistoryAdapter :
         fun bind(item: DoseHistoryListItem.DoseItem) {
             val dose = item.dose
             val context = binding.root.context
-
             val time = dose.timestamp.format(timeFormatter)
+
             val detailsText = StringBuilder(item.medName)
             dose.quantidadeAdministrada?.let { detailsText.append(" - $it") }
 
-            binding.textViewDoseDetails.text = "$time - $detailsText"
+            // Altera o texto principal se a dose foi pulada
+            if (item.calculatedStatus == CalculatedDoseStatus.SKIPPED) {
+                binding.textViewDoseDetails.text = "$time - Dose de ${item.medName} foi pulada"
+            } else {
+                binding.textViewDoseDetails.text = "$time - $detailsText"
+            }
 
-            if (!dose.localDeAplicacao.isNullOrBlank()) {
-                binding.textViewDoseExtraInfo.text = "Local: ${dose.localDeAplicacao}"
+            // Exibe notas (motivo de pular/adiantar) ou local de aplicação
+            val extraInfo = when {
+                !dose.notas.isNullOrBlank() -> "Nota: ${dose.notas}"
+                !dose.localDeAplicacao.isNullOrBlank() -> "Local: ${dose.localDeAplicacao}"
+                else -> null
+            }
+
+            if (extraInfo != null) {
+                binding.textViewDoseExtraInfo.text = extraInfo
                 binding.textViewDoseExtraInfo.visibility = View.VISIBLE
             } else {
                 binding.textViewDoseExtraInfo.visibility = View.GONE
             }
 
-            // ✅ CORREÇÃO DEFINITIVA: Usa o 'calculatedStatus' e o when é exaustivo.
+            // ✅ CORREÇÃO: Adicionado o caso 'SKIPPED'
             val (iconRes, tintColor) = when (item.calculatedStatus) {
                 CalculatedDoseStatus.ON_TIME -> R.drawable.ic_check_circle to R.color.success_green
                 CalculatedDoseStatus.TOO_EARLY -> R.drawable.ic_arrow_upward to R.color.error_red
                 CalculatedDoseStatus.TOO_LATE -> R.drawable.ic_arrow_downward to R.color.warning_orange
                 CalculatedDoseStatus.EXTRA -> R.drawable.ic_add_alert to R.color.error_red
+                CalculatedDoseStatus.SKIPPED -> R.drawable.ic_skip to R.color.md_theme_onSurfaceVariant
                 CalculatedDoseStatus.SPORADIC -> R.drawable.ic_info to R.color.md_theme_onSurfaceVariant
             }
 
