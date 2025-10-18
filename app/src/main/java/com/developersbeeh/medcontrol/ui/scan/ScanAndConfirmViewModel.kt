@@ -17,6 +17,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.util.UUID
 import javax.inject.Inject
 
@@ -98,7 +99,6 @@ class ScanAndConfirmViewModel @Inject constructor(
         anotacoes: String?
     ) {
         viewModelScope.launch {
-            // ✅ CORREÇÃO: O objeto Lote é criado com todas as informações
             val lote = EstoqueLote(
                 quantidade = estoque,
                 quantidadeInicial = estoque,
@@ -107,16 +107,17 @@ class ScanAndConfirmViewModel @Inject constructor(
                 dataValidade = validade
             }
 
-            // ✅ CORREÇÃO: A lista 'lotes' do medicamento é preenchida
             val medicamento = Medicamento(
                 id = UUID.randomUUID().toString(),
                 nome = nome,
                 isUsoEsporadico = true,
-                lotes = listOf(lote), // AQUI ESTAVA FALTANDO
+                lotes = listOf(lote),
                 principioAtivo = principioAtivo,
                 classeTerapeutica = classeTerapeutica,
                 anotacoes = anotacoes,
-                dosagem = ""
+                dosagem = "",
+                // ✅ CORREÇÃO: Define a data de criação no momento do salvamento
+                dataCriacao = LocalDateTime.now().toString()
             )
 
             val targetDependentId = dependentId ?: medicationRepository.getCurrentUserId() ?: ""

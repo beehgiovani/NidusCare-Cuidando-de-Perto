@@ -32,8 +32,10 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 private const val TAG = "AddMedicamentoFragment"
@@ -74,7 +76,6 @@ class AddMedicamentoFragment : Fragment() {
                 actionHandler.checkExactAlarmPermission()
             } else {
                 Toast.makeText(requireContext(), getString(R.string.permission_denied), Toast.LENGTH_SHORT).show()
-                // ✅ CORREÇÃO: Chama a função correta no ActionHandler
                 actionHandler.handleSaveWithPermissionResult(granted = false)
             }
         }
@@ -88,6 +89,9 @@ class AddMedicamentoFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         userPreferences = UserPreferences(requireContext())
 
+        // ✅ CORREÇÃO: ViewModel é inicializado primeiro
+        viewModel.initialize(args.medicamento)
+
         setupRecyclerViews()
 
         lotesAdapter = LotesAdapter(binding.autoCompleteUnidade.text.toString()) { lote ->
@@ -96,7 +100,6 @@ class AddMedicamentoFragment : Fragment() {
             binding.dividerLotes.visibility = if (lotesList.isNotEmpty()) View.VISIBLE else View.GONE
         }
 
-        // ✅ CORREÇÃO: Instancia os Handlers na ordem correta, injetando o uiHandler no actionHandler
         uiHandler = AddMedicamentoUiHandler(this, binding, lotesAdapter, lotesList)
         actionHandler = AddMedicamentoActionHandler(this, binding, viewModel, uiHandler)
         guideHandler = AddMedicamentoGuideHandler(this, binding, userPreferences)
@@ -109,16 +112,26 @@ class AddMedicamentoFragment : Fragment() {
     }
 
     private fun setupInitialState() {
-        medicamentoParaEditar = args.medicamento
+        // A lógica de inicialização foi movida para o ViewModel
         viewModel.loadAllCaregiverMedications(args.dependentId)
 
-        if (medicamentoParaEditar == null) {
-            binding.textViewTitle.text = getString(R.string.add_medication_title)
-            actionHandler.checkForDraft()
-        } else {
-            binding.textViewTitle.text = getString(R.string.edit_medication_title)
-            uiHandler.preencherCamposParaEdicao(medicamentoParaEditar!!)
+        // Observa o medicamento para preencher o formulário
+        viewModel.medicamentoParaEditar.observe(viewLifecycleOwner) { med ->
+            medicamentoParaEditar = med // Atualiza a variável local
+            if (args.medicamento == null) {
+                binding.textViewTitle.text = getString(R.string.add_medication_title)
+                // Se não for um rascunho, preenche com o padrão (novo)
+                if (!viewModel.hasDraft()) {
+                    uiHandler.preencherCamposParaEdicao(med)
+                } else {
+                    actionHandler.checkForDraft()
+                }
+            } else {
+                binding.textViewTitle.text = getString(R.string.edit_medication_title)
+                uiHandler.preencherCamposParaEdicao(med)
+            }
         }
+
         setupAutoComplete()
         uiHandler.setupDurationUnitDropdown()
     }

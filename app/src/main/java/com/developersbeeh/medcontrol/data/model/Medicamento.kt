@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/data/model/Medicamento.kt
 package com.developersbeeh.medcontrol.data.model
 
 import android.os.Parcelable
@@ -12,11 +11,6 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
-
-
-/**
- * Representa um medicamento cadastrado por um usuário para um dependente.
- */
 @Parcelize
 data class Medicamento(
     @DocumentId
@@ -98,6 +92,7 @@ data class Medicamento(
     var dataCriacaoLocalDateTime: LocalDateTime
         get() {
             return try {
+                // ✅ CORREÇÃO: Tenta parsear. Se falhar ou estiver em branco, usa o início do dia.
                 if (dataCriacao.isNotBlank()) {
                     LocalDateTime.parse(dataCriacao)
                 } else {

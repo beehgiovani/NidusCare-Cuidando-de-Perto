@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/addmedicamento/AddMedicamentoViewModel.kt
 package com.developersbeeh.medcontrol.ui.addmedicamento
 
 import android.util.Log
@@ -60,6 +59,23 @@ class AddMedicamentoViewModel @Inject constructor(
 
     private val _existingMedicationFound = MutableLiveData<Event<Pair<Medicamento, String>?>>()
     val existingMedicationFound: LiveData<Event<Pair<Medicamento, String>?>> = _existingMedicationFound
+
+    // ✅ ADIÇÃO: Armazena o estado do medicamento que está sendo editado/criado
+    private val _medicamentoParaEditar = MutableLiveData<Medicamento>()
+    val medicamentoParaEditar: LiveData<Medicamento> = _medicamentoParaEditar
+
+    fun initialize(medicamento: Medicamento?) {
+        // ✅ CORREÇÃO: Define um estado padrão se for um novo medicamento
+        if (_medicamentoParaEditar.value != null) return // Já inicializado
+
+        if (medicamento == null) {
+            // Se for um NOVO medicamento, define o padrão como Uso Contínuo
+            _medicamentoParaEditar.value = Medicamento(isUsoContinuo = true)
+        } else {
+            // Se for EDITANDO, carrega o medicamento existente
+            _medicamentoParaEditar.value = medicamento
+        }
+    }
 
     fun hasDraft(): Boolean {
         return userPreferences.getMedicationDraft() != null

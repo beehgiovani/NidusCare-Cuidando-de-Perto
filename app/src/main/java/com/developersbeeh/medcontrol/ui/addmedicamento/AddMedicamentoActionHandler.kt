@@ -46,7 +46,7 @@ class AddMedicamentoActionHandler(
 
     fun handleSave() {
         if (!validarCampos()) {
-            return // A validação falhou, a UI já foi atualizada para mostrar o erro.
+            return
         }
 
         val isUsoEsporadico = fragment.isUsoEsporadico()
@@ -65,10 +65,17 @@ class AddMedicamentoActionHandler(
             return
         }
 
+        // ✅ CORREÇÃO: Garante que 'dataCriacao' seja definida se estiver em branco (ex: editando da farmacinha)
+        val dataCriacaoFinal = if (fragment.medicamentoParaEditar?.dataCriacao.isNullOrBlank()) {
+            LocalDateTime.now().toString()
+        } else {
+            fragment.medicamentoParaEditar!!.dataCriacao
+        }
+
         val isUsoEsporadico = fragment.isUsoEsporadico()
         val medicamentoFinal = getCurrentMedicationStateFromUi().copy(
             id = fragment.medicamentoParaEditar?.id ?: UUID.randomUUID().toString(),
-            dataCriacao = fragment.medicamentoParaEditar?.dataCriacao ?: LocalDateTime.now().toString(),
+            dataCriacao = dataCriacaoFinal,
             usaNotificacao = if (isUsoEsporadico) false else granted
         )
         viewModel.saveMedicamento(medicamentoFinal, fragment.getDependentIdArgs(), fragment.isEditing())
@@ -118,7 +125,7 @@ class AddMedicamentoActionHandler(
         // --- Passo 3: Duração ---
         if (!fragment.isUsoEsporadico()) {
             if (binding.radioTerminoDuracao.isChecked && binding.editTextDuracao.text.toString().isBlank()) {
-                binding.tilDuracao.error = context.getString(R.string.required_field)
+                binding.tilDuracao.error = context.getString(R.string.field_required)
                 uiHandler.expandAndFocus(WizardStep.STEP_3, binding.editTextDuracao)
                 return false
             } else {
@@ -131,7 +138,7 @@ class AddMedicamentoActionHandler(
             }
         }
 
-        return true // Todas as validações passaram
+        return true
     }
 
 
@@ -145,12 +152,12 @@ class AddMedicamentoActionHandler(
                 }
                 .setNegativeButton("Descartar") { _, _ ->
                     viewModel.clearDraft()
-                    fragment.uiHandler.preencherCamposParaEdicao(Medicamento())
+                    viewModel.medicamentoParaEditar.value?.let { fragment.uiHandler.preencherCamposParaEdicao(it) }
                 }
                 .setCancelable(false)
                 .show()
         } else {
-            fragment.uiHandler.preencherCamposParaEdicao(Medicamento())
+            viewModel.medicamentoParaEditar.value?.let { fragment.uiHandler.preencherCamposParaEdicao(it) }
         }
     }
 
@@ -274,6 +281,37 @@ class AddMedicamentoActionHandler(
         }
     }
 
+    internal fun checkExactAlarmPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            if (!alarmManager.canScheduleExactAlarms()) {
+                showExactAlarmPermissionDialog()
+            } else {
+                handleSaveWithPermissionResult(granted = true)
+            }
+        } else {
+            handleSaveWithPermissionResult(granted = true)
+        }
+    }
+
+    private fun showExactAlarmPermissionDialog() {
+        MaterialAlertDialogBuilder(context)
+            .setTitle(fragment.getString(R.string.permission_needed_title))
+            .setMessage(fragment.getString(R.string.exact_alarm_permission_message))
+            .setPositiveButton(fragment.getString(R.string.grant)) { _, _ ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).also { intent ->
+                        fragment.startActivity(intent)
+                    }
+                }
+            }
+            .setNegativeButton(fragment.getString(R.string.not_now)) { dialog, _ ->
+                handleSaveWithPermissionResult(granted = false)
+                dialog.dismiss()
+            }
+            .show()
+    }
+
     internal fun tryAddLoteFromInlineForm(): Boolean {
         val quantidadeStr = binding.editTextLoteQuantidade.text.toString().replace(',', '.')
         val validadeStr = binding.editTextLoteValidade.text.toString()
@@ -383,37 +421,6 @@ class AddMedicamentoActionHandler(
             }
         }
         return horarios.sorted()
-    }
-
-    internal fun checkExactAlarmPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            if (!alarmManager.canScheduleExactAlarms()) {
-                showExactAlarmPermissionDialog()
-            } else {
-                handleSaveWithPermissionResult(granted = true)
-            }
-        } else {
-            handleSaveWithPermissionResult(granted = true)
-        }
-    }
-
-    private fun showExactAlarmPermissionDialog() {
-        MaterialAlertDialogBuilder(context)
-            .setTitle(fragment.getString(R.string.permission_needed_title))
-            .setMessage(fragment.getString(R.string.exact_alarm_permission_message))
-            .setPositiveButton(fragment.getString(R.string.grant)) { _, _ ->
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).also { intent ->
-                        fragment.startActivity(intent)
-                    }
-                }
-            }
-            .setNegativeButton(fragment.getString(R.string.not_now)) { dialog, _ ->
-                handleSaveWithPermissionResult(granted = false)
-                dialog.dismiss()
-            }
-            .show()
     }
 
     internal fun coletarLocais(): List<String> {
