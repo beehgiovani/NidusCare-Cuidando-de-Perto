@@ -14,7 +14,7 @@ admin.initializeApp();
 
 // --- INÍCIO DO CÓDIGO DE AUTENTICAÇÃO ---
 let isPlayApiInitialized = false;
-let auth;
+let auth; 
 
 async function initGooglePlayPublisher() {
     if (isPlayApiInitialized) {
@@ -28,7 +28,7 @@ async function initGooglePlayPublisher() {
             } );
         }
         const authClient = await auth.getClient();
-        google.options({ auth: authClient });
+        google.options({ auth: authClient }); 
         isPlayApiInitialized = true;
         logger.info("✅ API do Google Play Developer autenticada com sucesso.");
     } catch (error) {
@@ -292,7 +292,7 @@ exports.analisarCaixaRemedio = onCall({
         throw new HttpsError("permission-denied", "Esta funcionalidade é exclusiva para usuários Premium.");
     }
 
-    const { imageGcsUri } = request.data;
+    const { imageGcsUri } = request.data; 
     if (!imageGcsUri) {
         throw new HttpsError("invalid-argument", "O URI da imagem no Google Cloud Storage é obrigatório.");
     }
@@ -302,7 +302,7 @@ exports.analisarCaixaRemedio = onCall({
 
         const bucketName = imageGcsUri.split('/')[2];
         const filePath = imageGcsUri.split('/').slice(3).join('/');
-
+        
         const [metadata] = await admin.storage().bucket(bucketName).file(filePath).getMetadata();
         const mimeType = metadata.contentType;
 
@@ -339,9 +339,9 @@ exports.analisarCaixaRemedio = onCall({
             4. Para "estoque", retorne um número inteiro.
         `;
 
-        const imagePart = { fileData: { mimeType: mimeType, fileUri: imageGcsUri } };
+        const imagePart = { fileData: { mimeType: mimeType, fileUri: imageGcsUri } }; 
         const req = { contents: [{ role: "user", parts: [{ text: prompt }, imagePart] }] };
-
+        
         const result = await generativeModel.generateContent(req);
         const responseText = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
@@ -384,13 +384,13 @@ exports.analisarReceita = onCall({ cors: true, maxInstances: 10, memory: '1GiB',
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "A função deve ser chamada por um usuário autenticado.");
     }
-
+    
     // ✅ CORREÇÃO: Espera 'imageGcsUri' (gs://)
     const { imageGcsUri, alergiasConhecidas, condicoesPreexistentes, medicamentosAtuais } = request.data;
     if (!imageGcsUri) {
         throw new HttpsError("invalid-argument", "O GCS URI da imagem é obrigatório.");
     }
-
+    
     try {
         const model = getGenerativeModel();
         const prompt = buildPrescriptionAnalysisPrompt(alergiasConhecidas, condicoesPreexistentes, medicamentosAtuais);
@@ -405,14 +405,14 @@ exports.analisarReceita = onCall({ cors: true, maxInstances: 10, memory: '1GiB',
              throw new HttpsError("invalid-argument", "O arquivo fornecido não é uma imagem válida.");
         }
         logger.info(`Analisando receita: ${imageGcsUri} (Tipo: ${mimeType})`);
-
+        
         // ✅ CORREÇÃO: Usa 'fileData' (camelCase)
-        const imageFilePart = { fileData: { mimeType: mimeType, fileUri: imageGcsUri } };
-
+        const imageFilePart = { fileData: { mimeType: mimeType, fileUri: imageGcsUri } }; 
+        
         const req = { contents: [{ role: "user", parts: [{ text: prompt }, imageFilePart] }] };
         const result = await model.generateContent(req);
         const rawAnalysis = result.response.candidates[0].content.parts[0].text;
-
+        
         return parsePrescriptionAnalysis(rawAnalysis);
 
     } catch (error) {
@@ -426,7 +426,7 @@ exports.analisarRefeicao = onCall({ cors: true, memory: "1GiB", timeoutSeconds: 
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "A função deve ser chamada por um usuário autenticado.");
     }
-
+    
     // ✅ CORREÇÃO: Espera 'imageGcsUri' (gs://)
     const { imageGcsUri, healthProfile } = request.data;
     if (!imageGcsUri) {
@@ -595,8 +595,9 @@ exports.gerarResumoConsulta = onCall({ cors: true, memory: "1GiB", timeoutSecond
     }
 });
 
-// ✅ OTIMIZAÇÃO: Memória reduzida para 512MiB
-exports.getChatResponse = onCall({ cors: true, memory: "1024MiB", minInstances: 0, enforceAppCheck: true }, async (request) => {
+
+// Otimizada para 512MiB e com App Check
+exports.getChatResponse = onCall({ cors: true, memory: "512MiB", minInstances: 0, enforceAppCheck: true }, async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Usuário não autenticado.");
     const { prompt, dependentId } = request.data;
     if (!prompt || !dependentId) throw new HttpsError("invalid-argument", "Parâmetros 'prompt' e 'dependentId' são obrigatórios.");
@@ -606,55 +607,59 @@ exports.getChatResponse = onCall({ cors: true, memory: "1024MiB", minInstances: 
         const now = new Date();
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(now.getDate() - 7);
-
+        const startDateString = sevenDaysAgo.toISOString().split('T')[0];
+        // 1. Coletar todos os dados em paralelo
         const [
             dependentDoc, chatHistorySnap, medsSnap, notesSnap, appointmentsSnap,
             hydrationSnap, activitySnap, sleepSnap, cycleSnap
         ] = await Promise.all([
             db.collection("dependentes").doc(dependentId).get(),
             db.collection("dependentes").doc(dependentId).collection("chat_history").orderBy("timestamp", "desc").limit(10).get(),
-            db.collection("dependentes").doc(dependentId).collection("medicamentos").where("isPaused", "==", false).get(),
+            db.collection("dependentes").doc(dependentId).collection("medicamentos").where("isPaused", "==", false).where("isArchived", "==", false).get(),
             db.collection("dependentes").doc(dependentId).collection("health_notes").where("timestamp", ">=", sevenDaysAgo).get(),
             db.collection("dependentes").doc(dependentId).collection("agendamentos").where("timestamp", ">=", admin.firestore.Timestamp.fromDate(now)).limit(5).get(),
             db.collection("dependentes").doc(dependentId).collection("hidratacao").where("timestamp", ">=", sevenDaysAgo).get(),
             db.collection("dependentes").doc(dependentId).collection("atividades_fisicas").where("timestamp", ">=", sevenDaysAgo).get(),
-            db.collection("dependentes").doc(dependentId).collection("sono_registros").where("data", ">=", sevenDaysAgo.toISOString().split('T')[0]).get(),
+            db.collection("dependentes").doc(dependentId).collection("sono_registros").where("data", ">=", startDateString).get(),
             db.collection("dependentes").doc(dependentId).collection("daily_cycle_logs").orderBy("dateString", "desc").limit(45).get()
         ]);
 
         if (!dependentDoc.exists) throw new HttpsError("not-found", "Dependente não encontrado.");
 
+        // 2. Processar e resumir os dados
         const dependentData = dependentDoc.data();
-        const chatHistory = chatHistorySnap.docs.map(doc => doc.data()).reverse();
+        const chatHistory = formatChatHistory(chatHistorySnap.docs.map(doc => doc.data()).reverse());
         const medications = medsSnap.docs.map(doc => doc.data());
         const healthNotes = notesSnap.docs.map(doc => doc.data());
         const appointments = appointmentsSnap.docs.map(doc => doc.data());
+        const wellnessData = summarizeWellnessData(hydrationSnap, activitySnap, sleepSnap, cycleSnap);
 
-        const wellnessData = {};
-        const hydrationTotal = hydrationSnap.docs.reduce((sum, doc) => sum + (doc.data().quantidadeMl || 0), 0);
-        wellnessData.avgHydration = hydrationTotal / 7;
-        const activityTotal = activitySnap.docs.reduce((sum, doc) => sum + (doc.data().duracaoMinutos || 0), 0);
-        wellnessData.avgActivity = activityTotal / 7;
-        const sleepTotal = sleepSnap.docs.reduce((sum, doc) => {
-            try {
-                const start = new Date(`1970-01-01T${doc.data().horaDeDormir}Z`);
-                const end = new Date(`1970-01-01T${doc.data().horaDeAcordar}Z`);
-                let diff = end.getTime() - start.getTime();
-                if (diff < 0) diff += 24 * 60 * 60 * 1000;
-                return sum + (diff / (1000 * 60 * 60));
-            } catch (e) { return sum; }
-        }, 0);
-        wellnessData.avgSleep = sleepTotal / (sleepSnap.size || 1);
-        wellnessData.cycleSummary = null;
-
+        // 3. Construir o prompt robusto
         const model = getGenerativeModel();
         const fullPrompt = buildChatPrompt(prompt, dependentData, chatHistory, medications, healthNotes, appointments, wellnessData);
 
+        // 4. Chamar a IA
         const req = { contents: [{ role: "user", parts: [{ text: fullPrompt }] }] };
         const result = await model.generateContent(req);
 
         const responseText = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!responseText) throw new HttpsError("unavailable", "O assistente não conseguiu processar sua pergunta.");
+
+        // 5. Salvar no histórico
+        const batch = db.batch();
+        const userChatRef = db.collection("dependentes").doc(dependentId).collection("chat_history").doc();
+        batch.set(userChatRef, {
+            sender: "USER",
+            text: prompt,
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+        const aiChatRef = db.collection("dependentes").doc(dependentId).collection("chat_history").doc();
+        batch.set(aiChatRef, {
+            sender: "AI",
+            text: responseText,
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+        await batch.commit();
 
         return { response: responseText };
 
@@ -664,6 +669,136 @@ exports.getChatResponse = onCall({ cors: true, memory: "1024MiB", minInstances: 
         throw new HttpsError("internal", "Não foi possível conectar ao assistente de IA.");
     }
 });
+
+// ✅ NOVA FUNÇÃO (Adicione esta)
+function summarizeWellnessData(hydrationSnap, activitySnap, sleepSnap, cycleSnap) {
+    const wellnessData = {};
+    const today = new Date();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(today.getDate() - 7);
+
+    // Hidratação
+    const hydrationTotal = hydrationSnap.docs.reduce((sum, doc) => sum + (doc.data().quantidadeMl || 0), 0);
+    wellnessData.avgHydration = Math.round(hydrationTotal / 7);
+
+    // Atividade
+    const activityTotal = activitySnap.docs.reduce((sum, doc) => sum + (doc.data().duracaoMinutos || 0), 0);
+    wellnessData.avgActivity = Math.round(activityTotal / 7);
+
+    // Sono
+    const sleepTotal = sleepSnap.docs.reduce((sum, doc) => {
+        try {
+            const start = new Date(`1970-01-01T${doc.data().horaDeDormir}Z`);
+            const end = new Date(`1970-01-01T${doc.data().horaDeAcordar}Z`);
+            let diff = end.getTime() - start.getTime();
+            if (diff < 0) diff += 24 * 60 * 60 * 1000; // Lida com o sono que cruza a meia-noite
+            return sum + (diff / (1000 * 60 * 60)); // horas
+        } catch (e) { return sum; }
+    }, 0);
+    wellnessData.avgSleep = (sleepTotal / (sleepSnap.size || 1)).toFixed(1); // Média de horas com 1 decimal
+
+    // Ciclo
+    const latestCycle = cycleSnap.docs.length > 0 ? cycleSnap.docs[0].data() : null;
+    if (latestCycle) {
+        wellnessData.cycleSummary = {
+            phase: latestCycle.phase || "N/A",
+            nextDate: latestCycle.nextMenstruationDate || "N/A"
+        };
+    } else {
+        wellnessData.cycleSummary = null;
+    }
+
+    return wellnessData;
+}
+
+// ✅ NOVA FUNÇÃO (Adicione esta)
+function formatChatHistory(chatHistory) {
+    if (!chatHistory || chatHistory.length === 0) {
+        return "Início da conversa.";
+    }
+    return chatHistory.map(msg => {
+        const sender = (msg.sender === 'AI' ? 'Nidus' : 'Usuário');
+        return `${sender}: ${msg.text}`;
+    }).join('\n');
+}
+
+// ✅ NOVA FUNÇÃO (Adicione esta, substituindo qualquer versão antiga)
+function buildChatPrompt(prompt, dependentData, chatHistory, medications, healthNotes, appointments, wellnessData) {
+    const { nome, dataDeNascimento, sexo, alergias, condicoesPreexistentes, peso, altura } = dependentData;
+    const calculatedAge = calculateAgeFromDobString(dataDeNascimento);
+    const dateFormatter = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    // --- 1. Perfil do Paciente ---
+    let profileString = `Nome: ${nome}, Idade: ${calculatedAge || 'N/A'} anos, Sexo: ${sexo || 'N/A'}.`;
+    if (peso) profileString += ` Peso: ${peso}kg.`;
+    if (altura) profileString += ` Altura: ${altura}cm.`;
+    if (alergias) profileString += ` Alergias conhecidas: ${alergias}.`;
+    if (condicoesPreexistentes) profileString += ` Condições pré-existentes: ${condicoesPreexistentes}.`;
+
+    // --- 2. Histórico do Chat ---
+    const historyString = chatHistory; // Já formatado pela função helper
+
+    // --- 3. Medicamentos ---
+    let medsString = "Nenhum medicamento ativo registrado.";
+    if (medications && medications.length > 0) {
+        medsString = medications.map(med => `- ${med.nome} (${med.dosagem})`).join('\n');
+    }
+
+    // --- 4. Anotações de Saúde Recentes ---
+    let notesString = "Nenhuma anotação de saúde nos últimos 7 dias.";
+    if (healthNotes && healthNotes.length > 0) {
+        notesString = healthNotes.map(note => {
+            const date = dateFormatter.format(note.timestamp.toDate());
+            const values = Object.entries(note.values).map(([key, value]) => `${key}: ${value}`).join(', ');
+            return `- Em ${date}: ${note.type} - ${values}`;
+        }).join('\n');
+    }
+    
+    // --- 5. Dados de Bem-Estar ---
+    let wellnessString = "Sem dados de bem-estar registrados nos últimos 7 dias.";
+    if (wellnessData) {
+        wellnessString = `Sono (média 7d): ${wellnessData.avgSleep}h. Hidratação (média 7d): ${wellnessData.avgHydration}ml. Atividade (média 7d): ${wellnessData.avgActivity}min.`;
+        if (wellnessData.cycleSummary) {
+            wellnessString += ` Fase do ciclo atual: ${wellnessData.cycleSummary.phase}. Próxima menstruação prevista: ${wellnessData.cycleSummary.nextDate}.`;
+        }
+    }
+
+    // --- 6. Agendamentos Futuros ---
+    let appointmentsString = "Nenhum agendamento futuro.";
+    if (appointments && appointments.length > 0) {
+        appointmentsString = appointments.map(apt => {
+             const date = dateFormatter.format(apt.timestamp.toDate());
+             return `- ${apt.titulo} (${apt.tipo}) em ${date}.`;
+        }).join('\n');
+    }
+
+    // --- Montagem do Prompt Final ---
+    return `
+        Você é "Nidus", um assistente de saúde IA empático e prestativo, parte do aplicativo NidusCare.
+        Sua principal diretriz é a SEGURANÇA. Você NUNCA deve:
+        1. Fornecer diagnósticos médicos.
+        2. Substituir o conselho de um médico.
+        3. Recomendar a alteração de uma dose ou tratamento prescrito.
+        4. Interpretar resultados de exames complexos.
+        Sua função é INFORMAR, ORGANIZAR dados, fornecer contexto e OFERECER BEM-ESTAR, sempre incentivando o usuário a consultar um profissional de saúde para decisões médicas.
+
+        **CONTEXTO DO PACIENTE (${dependentData.nome}):**
+        ---
+        **1. Perfil:** ${profileString}
+        **2. Resumo de Bem-Estar (Média 7 dias):** ${wellnessString}
+        **3. Medicamentos Ativos:**\n${medsString}
+        **4. Anotações de Saúde Recentes (Últimos 7 dias):**\n${notesString}
+        **5. Próximos Agendamentos:**\n${appointmentsString}
+        **6. Histórico da Conversa Recente:**\n${historyString}
+        ---
+
+        **PERGUNTA DO USUÁRIO:**
+        "${prompt}"
+
+        **INSTRUÇÃO:**
+        Baseado em TODO o contexto fornecido (especialmente o perfil e medicamentos), formule uma resposta empática, útil e, acima de tudo, segura. Se a pergunta for sobre um medicamento, verifique se ele está na lista de "Medicamentos Ativos". Se a pergunta for sobre um sintoma, correlacione com dados de saúde recentes, se possível, mas NUNCA diagnostique.
+    `;
+}
 
 // ✅ OTIMIZAÇÃO: Memória reduzida para 512MiB
 exports.sendEmergencyAlert = onCall({ cors: true, minInstances: 0, enforceAppCheck: true, memory: "256MiB" }, async (request) => {
@@ -1232,7 +1367,7 @@ exports.handlePlaySubscriptionNotification = onMessagePublished(
         const updateData = {
             premium: isPremium,
             subscriptionExpiryDate: expiryTimestamp,
-            familyId: null,
+            familyId: null, 
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         };
 
@@ -1283,16 +1418,16 @@ exports.verifyExpiredSubscriptions = onSchedule({
         for (const userDoc of premiumUsersQuery.docs) {
             const userId = userDoc.id;
             const userData = userDoc.data();
-
+            
             const purchasesSnapshot = await db.collection("users").doc(userId).collection("purchases").limit(1).get();
-
+            
             if (purchasesSnapshot.empty) {
                 logger.warn(`Usuário ${userId} é premium mas não tem documento de compra. Revertendo para não-premium.`);
                 batch.update(userDoc.ref, { premium: false, familyId: null });
                 usersToDeactivate++;
                 continue;
             }
-
+            
             const purchaseToken = purchasesSnapshot.docs[0].data()?.purchaseToken;
 
             if (!purchaseToken) {
@@ -1307,7 +1442,7 @@ exports.verifyExpiredSubscriptions = onSchedule({
                     packageName: ANDROID_PACKAGE_NAME,
                     token: purchaseToken,
                 });
-
+                
                 const subscriptionState = subscriptionResponse.data.subscriptionState;
                 const isStillActive = subscriptionState === "SUBSCRIPTION_STATE_ACTIVE";
 
@@ -1632,7 +1767,7 @@ function buildInsightPrompt(dependent, meds, doses, notes, hydration, activities
 
         REGRAS CRÍTICAS: NÃO FAÇA DIAGNÓSTICOS. NÃO DÊ CONSELHOS MÉDICOS. Formate a resposta como um array JSON com objetos contendo "type", "title", e "description" (máximo 30 palavras).
         Tipos de "type" permitidos: "POSITIVE_REINFORCEMENT", "ADHERENCE_ISSUE", "HEALTH_TREND_ALERT", "CORRELATION_INSIGHT".
-
+        
         DADOS PARA ANÁLISE (ÚLTIMOS 7 DIAS):
         - Perfil: Alergias (${dependent.alergias || "N/A"}), Condições (${dependent.condicoesPreexistentes || "N/A"}).
         - Anotações de Saúde: ${notes.length} registros.
@@ -1641,7 +1776,7 @@ function buildInsightPrompt(dependent, meds, doses, notes, hydration, activities
         - Refeições: ${meals.length} registros.
         - Sono: ${sleep.length} registros.
         - Ciclo Menstrual: ${cycleLogs.length} registros diários.
-
+        
         EXEMPLO DE SAÍDA JSON:
         \`\`\`json
         [
@@ -1752,7 +1887,7 @@ exports.sendDailySummary = onSchedule({
                 const dependent = dependentDoc.data();
                 const meds = (await dependentDoc.ref.collection('medicamentos').get()).docs.map(d => d.data());
                 const today = new Date();
-                const activeMeds = meds.filter(m => !m.isUsoEsporadico && !m.isArchived);
+                const activeMeds = meds.filter(m => !m.isUsoEsporadico && !m.isArchived); 
                 const dosesEsperadasHoje = calculateExpectedDosesForPeriod(activeMeds, today, today);
                 if (dosesEsperadasHoje > 0) {
                     summaryBody += `\n• ${dependent.nome}: ${dosesEsperadasHoje} dose(s) agendada(s) hoje.`;
