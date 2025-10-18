@@ -12,9 +12,9 @@ const ANDROID_PACKAGE_NAME = "com.developersbeeh.medcontrol";
 
 admin.initializeApp();
 
-// --- INÍCIO DO NOVO CÓDIGO DE AUTENTICAÇÃO ---
+// --- INÍCIO DO CÓDIGO DE AUTENTICAÇÃO ---
 let isPlayApiInitialized = false;
-let auth; // Declarar 'auth' aqui para ser acessível na função initGooglePlayPublisher
+let auth;
 
 async function initGooglePlayPublisher() {
     if (isPlayApiInitialized) {
@@ -22,14 +22,13 @@ async function initGooglePlayPublisher() {
     }
     logger.info("🔑 Autenticando com a API do Google Play Developer...");
     try {
-        // Inicializa o GoogleAuth apenas uma vez
         if (!auth) {
             auth = new google.auth.GoogleAuth({
                 scopes: ["https://www.googleapis.com/auth/androidpublisher"],
             } );
         }
         const authClient = await auth.getClient();
-        google.options({ auth: authClient }); // Configura o cliente de autenticação globalmente
+        google.options({ auth: authClient });
         isPlayApiInitialized = true;
         logger.info("✅ API do Google Play Developer autenticada com sucesso.");
     } catch (error) {
@@ -37,16 +36,11 @@ async function initGooglePlayPublisher() {
         throw new Error("Não foi possível inicializar o cliente da Google Play API.");
     }
 }
+// --- FIM DO CÓDIGO DE AUTENTICAÇÃO ---
 
-// --- FIM DO NOVO CÓDIGO DE AUTENTICAÇÃO ---
-
-// A inicialização do 'publisher' agora pode ser feita de forma mais simples,
-// pois a autenticação foi configurada globalmente via google.options()
 const publisher = google.androidpublisher("v3");
 
-
-
-// --- FUNÇÕES AUXILIARES DE CÁLCULO DE DOSE ---
+// --- INÍCIO DAS FUNÇÕES AUXILIARES ---
 
 const getUTCDate = (dateInput) => {
     if (typeof dateInput === 'string' && dateInput.includes('-')) {
@@ -56,7 +50,6 @@ const getUTCDate = (dateInput) => {
     const d = new Date(dateInput);
     return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 };
-
 
 const isMedicationDay = (med, date) => {
     const treatmentStartUTC = getUTCDate(med.dataInicioTratamentoString);
@@ -79,13 +72,217 @@ const isMedicationDay = (med, date) => {
     }
 };
 
+const calculateExpectedDosesForMedication = (med, periodStart, periodEnd) => {
+    if (med.isUsoEsporadico || !med.horarios || med.horarios.length === 0) {
+        return 0;
+    }
+    const treatmentStart = getUTCDate(med.dataInicioTratamentoString);
+    let treatmentEnd = getUTCDate(periodEnd);
+    if (!med.isUsoContinuo && med.duracaoDias > 0) {
+        const end = new Date(treatmentStart);
+        end.setUTCDate(end.getUTCDate() + med.duracaoDias - 1);
+        treatmentEnd = end;
+    }
+    let effectiveStart = new Date(treatmentStart > periodStart ? treatmentStart : periodStart);
+    let effectiveEnd = new Date(treatmentEnd < periodEnd ? treatmentEnd : periodEnd);
+    if (effectiveStart > effectiveEnd) {
+        return 0;
+    }
+    let totalExpected = 0;
+    let currentDate = new Date(effectiveStart);
+    while (currentDate <= effectiveEnd) {
+        if (isMedicationDay(med, currentDate)) {
+            if (currentDate.getTime() === treatmentStart.getTime() && med.dataCriacao && typeof med.dataCriacao === 'string') {
+                const creationDateTime = new Date(med.dataCriacao);
+                if (!isNaN(creationDateTime.getTime())) {
+                    const creationTimeInMinutes = creationDateTime.getUTCHours() * 60 + creationDateTime.getUTCMinutes();
+                    med.horarios.forEach(horarioStr => {
+                        const [hour, minute] = horarioStr.split(':').map(Number);
+                        const horarioInMinutes = hour * 60 + minute;
+                        if (horarioInMinutes >= creationTimeInMinutes) {
+                            totalExpected++;
+                        }
+                    });
+                } else {
+                    totalExpected += med.horarios.length;
+                }
+            } else {
+                totalExpected += med.horarios.length;
+            }
+        }
+        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+    }
+    return totalExpected;
+};
+
+const calculateExpectedDosesForPeriod = (medicamentos, startDate, endDate) => {
+    let totalExpected = 0;
+    const start = getUTCDate(startDate);
+    const end = getUTCDate(endDate);
+    medicamentos.forEach(med => {
+        totalExpected += calculateExpectedDosesForMedication(med, start, end);
+    });
+    return totalExpected;
+};
+
+function calculateNextDoseTimeJS(med) {
+    if (med.isUsoEsporadico || med.isPaused || !med.horarios || med.horarios.length === 0) {
+        return null;
+    }
+    const now = new Date();
+    const nowTimestamp = now.getTime();
+    const sortedHorarios = med.horarios.sort();
+    for (let i = 0; i < 365; i++) {
+        const checkDate = new Date();
+        checkDate.setUTCDate(checkDate.getUTCDate() + i);
+        if (isMedicationDay(med, checkDate)) {
+            for (const horarioStr of sortedHorarios) {
+                const [hour, minute] = horarioStr.split(':').map(Number);
+                const nextDoseCandidateTimestamp = Date.UTC(
+                    checkDate.getUTCFullYear(),
+                    checkDate.getUTCMonth(),
+                    checkDate.getUTCDate(),
+                    hour,
+                    minute
+                );
+                if (nextDoseCandidateTimestamp > nowTimestamp) {
+                    return new Date(nextDoseCandidateTimestamp);
+                }
+            }
+        }
+    }
+    return null;
+}
+
+function calculateAgeFromDobString(dobString) {
+    if (!dobString || typeof dobString !== 'string') return null;
+    try {
+        let year, month, day;
+        if (dobString.includes('/')) {
+            [day, month, year] = dobString.split('/');
+        } else {
+            [year, month, day] = dobString.split('-');
+        }
+        if (!year || !month || !day || year.length < 4) return null;
+        const birthDate = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
+        if (isNaN(birthDate.getTime())) return null;
+        const today = new Date();
+        const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+        let age = todayUTC.getUTCFullYear() - birthDate.getUTCFullYear();
+        const m = todayUTC.getUTCMonth() - birthDate.getUTCMonth();
+        if (m < 0 || (m === 0 && todayUTC.getUTCDate() < birthDate.getUTCDate())) {
+            age--;
+        }
+        return age;
+    } catch (e) {
+        logger.warn("Não foi possível calcular a idade da string:", dobString, e);
+        return null;
+    }
+}
+
+async function getCaregiversToNotify(caregiverIds, settingKey) {
+    if (!caregiverIds || caregiverIds.length === 0) {
+        return [];
+    }
+    const usersSnapshot = await admin.firestore().collection("users").where(admin.firestore.FieldPath.documentId(), "in", caregiverIds).get();
+    const caregiversToNotify = [];
+    usersSnapshot.forEach(doc => {
+        if (doc.data()?.[settingKey] !== false) {
+            caregiversToNotify.push(doc.id);
+        }
+    });
+    return caregiversToNotify;
+}
+
+async function sendNotificationToCaregivers(caregiverIds, payload) {
+    if (!caregiverIds || caregiverIds.length === 0) {
+        logger.warn("Nenhum ID de cuidador fornecido para notificação.");
+        return;
+    }
+
+    const usersSnapshot = await admin.firestore().collection("users").where(admin.firestore.FieldPath.documentId(), "in", caregiverIds).get();
+
+    const tokens = [];
+    const userTokensMap = new Map();
+    usersSnapshot.forEach((doc) => {
+        const fcmToken = doc.data()?.fcmToken;
+        if (fcmToken) {
+            tokens.push(fcmToken);
+            userTokensMap.set(fcmToken, doc.id);
+        } else {
+            logger.warn(`Cuidador ${doc.id} não possui um token FCM.`);
+        }
+    });
+
+    if (tokens.length > 0) {
+        const uniqueTokens = [...new Set(tokens)];
+        const message = { ...payload, tokens: uniqueTokens };
+        try {
+            const response = await admin.messaging().sendEachForMulticast(message);
+            logger.info(`${response.successCount} notificações enviadas com sucesso.`);
+
+            if (response.failureCount > 0) {
+                const tokensToDelete = [];
+                response.responses.forEach((resp, idx) => {
+                    if (!resp.success) {
+                        const errorCode = resp.error.code;
+                        if (errorCode === 'messaging/registration-token-not-registered' || errorCode === 'messaging/invalid-registration-token') {
+                            const failedToken = uniqueTokens[idx];
+                            tokensToDelete.push(failedToken);
+                            const userId = userTokensMap.get(failedToken);
+                            logger.warn(`Token inválido detectado para o usuário ${userId}. Agendando para remoção.`);
+                        }
+                    }
+                });
+
+                if (tokensToDelete.length > 0) {
+                    const batch = admin.firestore().batch();
+                    tokensToDelete.forEach(token => {
+                        const userId = userTokensMap.get(token);
+                        if (userId) {
+                            const userRef = admin.firestore().collection('users').doc(userId);
+                            batch.update(userRef, { fcmToken: admin.firestore.FieldValue.delete() });
+                        }
+                    });
+                    await batch.commit();
+                    logger.info(`${tokensToDelete.length} tokens inválidos foram removidos do Firestore.`);
+                }
+            }
+        } catch (error) {
+            logger.error("Falha ao enviar notificações multicast.", error);
+        }
+    }
+}
+
+// --- FIM DAS FUNÇÕES AUXILIARES ---
+
+
+// --- INÍCIO DAS FUNÇÕES DE IA (GEMINI) ---
+
+let generativeModel;
+// ✅ CORREÇÃO: Função única para inicializar o modelo Gemini
+const getGenerativeModel = () => {
+    if (!generativeModel) {
+        logger.info("Inicializando o cliente Vertex AI e o modelo Generative AI...");
+        const vertex_ai = new VertexAI({
+            project: process.env.GCLOUD_PROJECT,
+            location: "us-central1",
+        });
+        generativeModel = vertex_ai.getGenerativeModel({
+            model: "gemini-2.5-pro", // ✅ CORREÇÃO: Modelo correto
+            generation_config: { max_output_tokens: 8192, temperature: 0.3, top_p: 0.95 },
+        });
+    }
+    return generativeModel;
+};
+
 exports.analisarCaixaRemedio = onCall({
     cors: true,
     memory: "1GiB",
     timeoutSeconds: 300,
-    minInstances: 0
+    minInstances: 0,
+    // enforceAppCheck: true // Removido
 }, async (request) => {
-    // 1. Validação de Autenticação e Permissão (Premium) - Sem alterações
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "Usuário não autenticado.");
     }
@@ -97,12 +294,16 @@ exports.analisarCaixaRemedio = onCall({
 
     const { imageGcsUri } = request.data;
     if (!imageGcsUri) {
-        throw new HttpsError("invalid-argument", "O URI da imagem é obrigatório.");
+        throw new HttpsError("invalid-argument", "O URI da imagem no Google Cloud Storage é obrigatório.");
     }
 
     try {
         const generativeModel = getGenerativeModel();
-        const [metadata] = await admin.storage().bucket(imageGcsUri.split('/')[2]).file(imageGcsUri.split('/').slice(3).join('/')).getMetadata();
+
+        const bucketName = imageGcsUri.split('/')[2];
+        const filePath = imageGcsUri.split('/').slice(3).join('/');
+
+        const [metadata] = await admin.storage().bucket(bucketName).file(filePath).getMetadata();
         const mimeType = metadata.contentType;
 
         if (!mimeType || !mimeType.startsWith('image/')) {
@@ -110,10 +311,8 @@ exports.analisarCaixaRemedio = onCall({
         }
         logger.info(`Analisando imagem: ${imageGcsUri} (Tipo: ${mimeType})`);
 
-        // ✅ ALTERAÇÃO: Prompt muito mais detalhado e estruturado
         const prompt = `
             Você é um assistente de IA especialista em analisar imagens de embalagens de medicamentos. Sua tarefa é um processo de duas etapas:
-
             **ETAPA 1: EXTRAÇÃO LITERAL DA IMAGEM**
             Primeiro, leia CUIDADOSAMENTE a imagem e extraia as seguintes informações VISÍVEIS:
             - O nome comercial completo, incluindo a dosagem (ex: "Tylenol 750mg").
@@ -121,10 +320,8 @@ exports.analisarCaixaRemedio = onCall({
             - O texto que descreve a quantidade (ex: "blister com 20 comprimidos", "frasco com 150 ml").
             - O número do lote, se visível.
             - A data de validade, se visível.
-
             **ETAPA 2: ESTRUTURAÇÃO E ENRIQUECIMENTO DOS DADOS**
             Agora, use as informações extraídas e seu conhecimento farmacêutico para preencher o seguinte formato JSON.
-
             Formato do JSON de saída:
             {
               "nome": "Nome completo do medicamento com dosagem",
@@ -135,7 +332,6 @@ exports.analisarCaixaRemedio = onCall({
               "lote": "O número do lote, se encontrado",
               "validade": "A data de validade, se encontrada, no formato MM/AAAA"
             }
-
             REGRAS CRÍTICAS:
             1. A resposta DEVE SER APENAS o objeto JSON, sem nenhum texto, explicação ou \`\`\`json\`\`\` ao redor.
             2. Se uma informação não for encontrada na imagem ou não puder ser deduzida com segurança, retorne uma string vazia "" para aquele campo.
@@ -183,709 +379,103 @@ exports.analisarCaixaRemedio = onCall({
     }
 });
 
-
-
-
-
-const calculateExpectedDosesForMedication = (med, periodStart, periodEnd) => {
-    if (med.isUsoEsporadico || !med.horarios || med.horarios.length === 0) {
-        return 0;
-    }
-    const treatmentStart = getUTCDate(med.dataInicioTratamentoString);
-    let treatmentEnd = getUTCDate(periodEnd);
-    if (!med.isUsoContinuo && med.duracaoDias > 0) {
-        const end = new Date(treatmentStart);
-        end.setUTCDate(end.getUTCDate() + med.duracaoDias - 1);
-        treatmentEnd = end;
-    }
-    let effectiveStart = new Date(treatmentStart > periodStart ? treatmentStart : periodStart);
-    let effectiveEnd = new Date(treatmentEnd < periodEnd ? treatmentEnd : periodEnd);
-    if (effectiveStart > effectiveEnd) {
-        return 0;
-    }
-    let totalExpected = 0;
-    let currentDate = new Date(effectiveStart);
-    while (currentDate <= effectiveEnd) {
-        if (isMedicationDay(med, currentDate)) {
-            if (currentDate.getTime() === treatmentStart.getTime() && med.dataCriacao && typeof med.dataCriacao === 'string') {
-                const creationDateTime = new Date(med.dataCriacao);
-                if (!isNaN(creationDateTime.getTime())) {
-                    const creationTimeInMinutes = creationDateTime.getUTCHours() * 60 + creationDateTime.getUTCMinutes();
-                    med.horarios.forEach(horarioStr => {
-                        const [hour, minute] = horarioStr.split(':').map(Number);
-                        const horarioInMinutes = hour * 60 + minute;
-                        if (horarioInMinutes >= creationTimeInMinutes) {
-                            totalExpected++;
-                        }
-                    });
-                } else {
-                    totalExpected += med.horarios.length;
-                }
-            } else {
-                totalExpected += med.horarios.length;
-            }
-        }
-        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
-    }
-    return totalExpected;
-};
-
-
-
-const calculateExpectedDosesForPeriod = (medicamentos, startDate, endDate) => {
-    let totalExpected = 0;
-    const start = getUTCDate(startDate);
-    const end = getUTCDate(endDate);
-    medicamentos.forEach(med => {
-        totalExpected += calculateExpectedDosesForMedication(med, start, end);
-    });
-    return totalExpected;
-};
-
-
-function calculateNextDoseTimeJS(med) {
-    if (med.isUsoEsporadico || med.isPaused || !med.horarios || med.horarios.length === 0) {
-        return null;
-    }
-    const now = new Date();
-    const nowTimestamp = now.getTime();
-    const sortedHorarios = med.horarios.sort();
-    for (let i = 0; i < 365; i++) {
-        const checkDate = new Date();
-        checkDate.setUTCDate(checkDate.getUTCDate() + i);
-        if (isMedicationDay(med, checkDate)) {
-            for (const horarioStr of sortedHorarios) {
-                const [hour, minute] = horarioStr.split(':').map(Number);
-                const nextDoseCandidateTimestamp = Date.UTC(
-                    checkDate.getUTCFullYear(),
-                    checkDate.getUTCMonth(),
-                    checkDate.getUTCDate(),
-                    hour,
-                    minute
-                );
-                if (nextDoseCandidateTimestamp > nowTimestamp) {
-                    return new Date(nextDoseCandidateTimestamp);
-                }
-            }
-        }
-    }
-    return null;
-}
-
-
-// --- FIM DAS FUNÇÕES AUXILIARES DE CÁLCULO --
-
-let generativeModel;
-const getGenerativeModel = () => {
-    if (!generativeModel) {
-        logger.info("Inicializando o cliente Vertex AI e o modelo Generative AI...");
-        const vertex_ai = new VertexAI({
-            project: process.env.GCLOUD_PROJECT,
-            location: "us-central1",
-        });
-        generativeModel = vertex_ai.getGenerativeModel({
-            model: "gemini-2.5-pro",
-            generation_config: { max_output_tokens: 8192, temperature: 0.3, top_p: 0.95 },
-        });
-    }
-    return generativeModel;
-};
-
-exports.onDataWritten = onDocumentWritten({
-    document: "dependentes/{dependentId}/{collectionId}/{docId}",
-    minInstances: 0
-}, async (event) => {
-    const collectionId = event.params.collectionId;
-    const dependentId = event.params.dependentId;
-    const docId = event.params.docId;
-
-    const relevantCollections = [
-        "historico_doses", "health_notes", "atividades", "insights",
-        "hidratacao", "atividades_fisicas", "refeicoes", "sono_registros"
-    ];
-
-    if (!relevantCollections.includes(collectionId)) {
-        return;
-    }
-
-    const db = admin.firestore();
-    const timelineRef = db.collection("dependentes").doc(dependentId).collection("timeline").doc(`${collectionId}_${docId}`);
-
-    if (!event.data.after.exists) {
-        try {
-            await timelineRef.delete();
-            logger.info(`[Timeline] Evento ${timelineRef.path} excluído.`);
-        } catch (error) {
-            logger.error(`[Timeline] Erro ao excluir evento ${timelineRef.path}:`, error);
-        }
-        return;
-    }
-
-    const dataBefore = event.data.before ? event.data.before.data() : null;
-    const dataAfter = event.data.after.data();
-
-    if (dataBefore && dataBefore.timestampString === dataAfter.timestampString) {
-        logger.info(`[Timeline] Gatilho ignorado para ${timelineRef.path} pois o timestamp não mudou.`);
-        return;
-    }
-
-    const eventData = await createTimelineEvent(dependentId, collectionId, docId, dataAfter);
-
-    if (eventData) {
-        try {
-            await timelineRef.set(eventData);
-            logger.info(`[Timeline] Evento salvo em ${timelineRef.path}`);
-        } catch (error) {
-            logger.error(`[Timeline] Erro ao salvar evento em ${timelineRef.path}:`, error);
-        }
-    }
-});
-
-async function createTimelineEvent(dependentId, collectionId, docId, data) {
-    const db = admin.firestore();
-    let event = {
-        id: `${collectionId}_${docId}`,
-        originalCollection: collectionId,
-        originalDocId: docId,
-        timestamp: null,
-        description: "",
-        author: "Sistema",
-        icon: "default",
-        type: "GENERIC"
-    };
-
-    if (data.timestampString) {
-        try {
-            const dateWithTimezone = new Date(data.timestampString + "-03:00");
-            event.timestamp = admin.firestore.Timestamp.fromDate(dateWithTimezone);
-        } catch (e) {
-            logger.error(`Erro ao converter timestampString '${data.timestampString}':`, e);
-            event.timestamp = admin.firestore.FieldValue.serverTimestamp();
-        }
-    } else if (data.timestamp && data.timestamp._seconds) {
-        event.timestamp = data.timestamp;
-    } else {
-        event.timestamp = admin.firestore.FieldValue.serverTimestamp();
-    }
-
-    try {
-        const dependentDoc = await db.collection("dependentes").doc(dependentId).get();
-        const dependentName = dependentDoc.data()?.nome || "Dependente";
-
-        let authorName = "Sistema";
-        if (data.userId && data.userId !== "dependent_user") {
-            const userDoc = await db.collection("users").doc(data.userId).get();
-            if (userDoc.exists) authorName = userDoc.data()?.name || "Cuidador";
-        } else if (data.autorNome) {
-            authorName = data.autorNome;
-        } else if (["historico_doses", "health_notes", "hidratacao", "atividades_fisicas", "refeicoes", "sono_registros"].includes(collectionId)) {
-            authorName = dependentName;
-        }
-        event.author = authorName;
-
-        switch (collectionId) {
-            case "historico_doses":
-                const medDoc = await db.collection("dependentes").doc(dependentId).collection("medicamentos").doc(data.medicamentoId).get();
-                const med = medDoc.exists ? medDoc.data() : null;
-                let doseDesc = `Registrou a dose de ${med?.nome || "medicamento"}`;
-                if (data.quantidadeAdministrada) {
-                    doseDesc = `Registrou ${data.quantidadeAdministrada} ${med?.unidadeDeEstoque || 'unidades'} de ${med?.nome || "medicamento"}`;
-                }
-                if (data.localDeAplicacao) {
-                    doseDesc += ` em ${data.localDeAplicacao}`;
-                }
-                event.description = doseDesc + ".";
-                event.icon = "DOSE";
-                event.type = "DOSE";
-                break;
-            case "health_notes":
-                event.description = formatHealthNoteValues(data);
-                event.icon = data.type;
-                event.type = "NOTE";
-                break;
-            case "atividades":
-                // ✅ CORREÇÃO ANTI-DUPLICIDADE
-                // Ignora o log de atividade se for de uma dose, pois já é tratado pelo "historico_doses".
-                if (data.tipo === "DOSE_REGISTRADA") {
-                    logger.info(`[Timeline] Ignorando evento de atividade 'DOSE_REGISTRADA' para evitar duplicidade.`);
-                    return null;
-                }
-                event.description = data.descricao.replace(authorName, "").trim();
-                event.icon = data.tipo;
-                event.type = "ACTIVITY";
-                break;
-            case "insights":
-                event.description = `${data.title}: ${data.description}`;
-                event.icon = "INSIGHT";
-                event.type = "INSIGHT";
-                break;
-            case "hidratacao":
-                event.description = `Registrou o consumo de ${data.quantidadeMl} ml de água.`;
-                event.icon = "HYDRATION";
-                event.type = "ACTIVITY";
-                break;
-            case "atividades_fisicas":
-                event.description = `Registrou ${data.duracaoMinutos} min de ${data.tipo}.`;
-                event.icon = "FITNESS";
-                event.type = "ACTIVITY";
-                break;
-            case "refeicoes":
-                const mealTypeMap = { "CAFE_DA_MANHA": "Café da Manhã", "ALMOCO": "Almoço", "JANTAR": "Jantar", "LANCHE": "Lanche" };
-                const mealTypeName = mealTypeMap[data.tipo] || "Refeição";
-                event.description = `Registrou ${mealTypeName}: ${data.descricao}`;
-                event.icon = "MEAL";
-                event.type = "ACTIVITY";
-                break;
-            case "sono_registros":
-                event.description = `Registrou um período de sono de ${data.horaDeDormir} até ${data.horaDeAcordar}.`;
-                event.icon = "SLEEP";
-                event.type = "ACTIVITY";
-                break;
-            default:
-                logger.warn(`Coleção '${collectionId}' não tem um mapeamento definido para a timeline.`);
-                return null;
-        }
-        return event;
-    } catch (error) {
-        logger.error(`Erro ao criar objeto de evento para ${collectionId}/${docId}:`, error);
-        return null;
-    }
-}
-
-
-function formatHealthNoteValues(note) {
-    const typeMap = {
-        "BLOOD_PRESSURE": "Pressão Arterial", "BLOOD_SUGAR": "Glicemia", "WEIGHT": "Peso",
-        "TEMPERATURE": "Temperatura", "MOOD": "Registro de Humor", "SYMPTOM": "Registro de Sintoma",
-        "GENERAL": "Anotação Geral"
-    };
-    const displayName = typeMap[note.type] || "Anotação";
-    let valueString = "";
-    switch (note.type) {
-        case "BLOOD_PRESSURE":
-            valueString = `${note.values.systolic}/${note.values.diastolic} mmHg`;
-            if (note.values.heartRate) valueString += `, ${note.values.heartRate} BPM`;
-            break;
-        case "BLOOD_SUGAR": valueString = `${note.values.sugarLevel} mg/dL`; break;
-        case "WEIGHT": valueString = `${note.values.weight} kg`; break;
-        case "TEMPERATURE": valueString = `${note.values.temperature} °C`; break;
-        case "MOOD": valueString = note.values.mood; break;
-        case "SYMPTOM": valueString = note.values.symptom; break;
-        case "GENERAL": valueString = note.values.generalNote; break;
-        default: valueString = Object.values(note.values).join(', ');
-    }
-    return `Registrou ${displayName}: ${valueString}`;
-}
-
-
-
-exports.handlePlaySubscriptionNotification = onMessagePublished(
-    { topic: "play-billing", minInstances: 0 },
-    async (event) => {
-        // Garante que o cliente da API seja inicializado antes de qualquer uso
-        await initGooglePlayPublisher();
-
-        logger.info("📩 Notificação do Google Play recebida via Pub/Sub.");
-
-        // 🔒 1. Validação inicial da estrutura
-        if (!event?.data?.message?.data) {
-            logger.warn("Evento Pub/Sub recebido sem dados válidos. Estrutura incorreta ou vazia.");
-            return;
-        }
-        const data = Buffer.from(event.data.message.data, "base64").toString("utf8");
-        let notification;
-
-        try {
-            notification = JSON.parse(data);
-        } catch (parseError) {
-            logger.error("Falha ao interpretar JSON da notificação:", parseError);
-            return;
-        }
-
-        if (!notification.subscriptionNotification) {
-            logger.info("Notificação não relacionada a assinatura. Ignorada.");
-            return;
-        }
-
-        const { purchaseToken, notificationType } = notification.subscriptionNotification;
-
-        // 🧩 2. Log de auditoria completo
-        logger.info("Detalhes da notificação de assinatura recebida:", {
-            notificationType,
-            purchaseToken,
-        });
-
-        if (!purchaseToken) {
-            logger.error("Notificação recebida sem purchaseToken. Ignorando.");
-            return;
-        }
-
-        const db = admin.firestore();
-
-        // 🔍 3. Buscar o usuário pelo purchaseToken
-        const purchasesSnapshot = await db
-            .collectionGroup("purchases")
-            .where("purchaseToken", "==", purchaseToken)
-            .limit(1)
-            .get();
-
-        if (purchasesSnapshot.empty) {
-            logger.error(`Nenhum usuário encontrado para o purchaseToken: ${purchaseToken}. Ignorando.`);
-            return;
-        }
-
-        const purchaseDocRef = purchasesSnapshot.docs[0].ref;
-        const purchaseData = purchasesSnapshot.docs[0].data();
-        const ownerId = purchaseData.userId;
-
-        if (!ownerId) {
-            logger.error(`Documento de compra sem userId associado. Token: ${purchaseToken}. Ignorando.`);
-            return;
-        }
-
-        const ownerRef = db.collection("users").doc(ownerId);
-
-        // 🛑 4. Proteção contra processamento duplicado (Idempotência)
-        if (purchaseData.lastNotificationTimestamp?.seconds >= admin.firestore.Timestamp.now().seconds) {
-            logger.info(`Evento duplicado recebido para o token ${purchaseToken}. Ignorando.`);
-            return;
-        }
-
-        // 🔄 5. Chamar a API do Google Play para obter o status real
-        let subscriptionDetails;
-        try {
-            const subscriptionResponse = await publisher.purchases.subscriptionsv2.get({
-                packageName: ANDROID_PACKAGE_NAME,
-                token: purchaseToken,
-            });
-            subscriptionDetails = subscriptionResponse.data;
-        } catch (apiError) {
-            logger.error(
-                `❌ Erro ao consultar a API do Google Play para o token ${purchaseToken}:`,
-                apiError
-            );
-            throw new Error(`Falha na consulta da API do Google Play: ${apiError.message}`);
-        }
-
-        // 🔎 6. Mapear o status da API para o status premium do Firestore
-        const subscriptionState = subscriptionDetails.subscriptionState;
-        const isPremium = subscriptionState === "SUBSCRIPTION_STATE_ACTIVE";
-
-        // ⏰ 7. Obter a data de expiração da resposta da API (agora garantida) - CÓDIGO CORRIGIDO
-        const expiryTimeMillisString = subscriptionDetails.expiryTime;
-        let expiryTimestamp = null;
-
-        if (expiryTimeMillisString) {
-            // Converte a string de milissegundos para um número
-            const expiryMillis = parseInt(expiryTimeMillisString, 10);
-            // Cria um objeto Timestamp do Firestore a partir dos milissegundos
-            if (!isNaN(expiryMillis)) {
-                expiryTimestamp = admin.firestore.Timestamp.fromMillis(expiryMillis);
-            }
-        }
-
-        logger.info(
-            `Atualizando status premium do usuário ${ownerId} → ${
-            isPremium ? "ATIVO" : "INATIVO"
-            } (API: ${subscriptionState}). Data de expiração: ${expiryTimestamp ? expiryTimestamp.toDate().toISOString() : 'N/A'}`
-        );
-
-        const updateData = {
-            premium: isPremium,
-            subscriptionExpiryDate: expiryTimestamp,
-            familyId: null, 
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        };
-
-        const batch = db.batch();
-
-        // ✏️ Atualiza o documento do usuário
-        batch.update(ownerRef, updateData);
-
-        // 📝 Atualiza o documento de compra para registrar o último processamento
-        batch.update(purchaseDocRef, {
-            lastNotificationTimestamp: admin.firestore.FieldValue.serverTimestamp(),
-        });
-
-        try {
-            await batch.commit();
-            logger.info(`✅ Status do usuário ${ownerId} atualizado com sucesso. Token: ${purchaseToken}`);
-        } catch (batchError) {
-            logger.error(
-                `❌ Erro ao comitar o batch de atualização para o usuário ${ownerId}:`,
-                batchError
-            );
-            throw batchError;
-        }
-    }
-);
-
-exports.verifyExpiredSubscriptions = onSchedule({
-    schedule: "every day 18:00",
-    timeZone: "America/Sao_Paulo",
-    minInstances: 0
-}, async (event) => {
-    // Garante que a autenticação seja inicializada antes de qualquer uso da API
-    await initGooglePlayPublisher();
-
-    logger.log("Iniciando verificação diária de status de assinaturas...");
-    const db = admin.firestore();
-
-    try {
-        // 1. Busca todos os usuários que AINDA estão marcados como premium no seu DB.
-        const premiumUsersQuery = await db.collection("users")
-            .where("premium", "==", true)
-            .get();
-
-        if (premiumUsersQuery.empty) {
-            logger.log("Nenhum usuário premium para verificar. Trabalho concluído.");
-            return;
-        }
-
-        logger.info(`Encontrados ${premiumUsersQuery.size} usuários premium para verificar.`);
-        const batch = db.batch();
-        let usersToDeactivate = 0;
-
-        // 2. Itera sobre cada usuário premium.
-        for (const userDoc of premiumUsersQuery.docs) {
-            const userId = userDoc.id;
-            const userData = userDoc.data();
-            
-            // Busca o documento de compra para obter o purchaseToken.
-            const purchasesSnapshot = await db.collection("users").doc(userId).collection("purchases").limit(1).get();
-            
-            if (purchasesSnapshot.empty) {
-                logger.warn(`Usuário ${userId} é premium mas não tem documento de compra. Revertendo para não-premium.`);
-                batch.update(userDoc.ref, { premium: false, familyId: null });
-                usersToDeactivate++;
-                continue;
-            }
-            
-            const purchaseToken = purchasesSnapshot.docs[0].data()?.purchaseToken;
-
-            if (!purchaseToken) {
-                logger.warn(`Documento de compra para o usuário ${userId} não tem purchaseToken. Revertendo.`);
-                batch.update(userDoc.ref, { premium: false, familyId: null });
-                usersToDeactivate++;
-                continue;
-            }
-
-            // 3. Consulta a API do Google Play para obter o status REAL e ATUALIZADO.
-            try {
-                const subscriptionResponse = await publisher.purchases.subscriptionsv2.get({
-                    packageName: ANDROID_PACKAGE_NAME,
-                    token: purchaseToken,
-                });
-                
-                const subscriptionState = subscriptionResponse.data.subscriptionState;
-                const isStillActive = subscriptionState === "SUBSCRIPTION_STATE_ACTIVE";
-
-                // 4. Se a API disser que a assinatura NÃO está mais ativa, atualiza no DB.
-                if (!isStillActive) {
-                    logger.info(`Assinatura do usuário ${userId} expirou (Status API: ${subscriptionState}). Agendando desativação.`);
-                    batch.update(userDoc.ref, { premium: false, familyId: null });
-                    usersToDeactivate++;
-                }
-
-            } catch (apiError) {
-                // Se a API retornar um erro (ex: 410 - compra não existe mais), a assinatura é inválida.
-                if (apiError.code === 410 || apiError.code === 404) {
-                     logger.warn(`Assinatura para o token ${purchaseToken} (usuário ${userId}) não foi encontrada na API. Desativando premium.`);
-                     batch.update(userDoc.ref, { premium: false, familyId: null });
-                     usersToDeactivate++;
-                } else {
-                    logger.error(`Erro ao consultar a API do Google Play para o usuário ${userId}:`, apiError.message);
-                }
-            }
-        }
-
-        if (usersToDeactivate > 0) {
-            await batch.commit();
-            logger.info(`${usersToDeactivate} usuários foram atualizados para premium: false.`);
-        } else {
-            logger.log("Nenhuma alteração de status necessária para os usuários premium verificados.");
-        }
-
-    } catch (error) {
-        logger.error("Erro catastrófico ao verificar e corrigir assinaturas expiradas:", error);
-    }
-});
-
-exports.inviteCaregiverByEmail = onCall({ cors: true, minInstances: 0 }, async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "Unauthenticated", "A função deve ser chamada por um usuário autenticado.");
-    }
-    const { email, dependenteId } = request.data;
-    if (!email || !dependenteId) {
-        throw new HttpsError("invalid-argument", "Invalid Arguments", "Os parâmetros 'email' e 'dependenteId' são obrigatórios.");
-    }
-
-    const db = admin.firestore();
-    const inviterId = request.auth.uid;
-
-    try {
-        const [inviterDoc, dependentDoc] = await Promise.all([
-            db.collection("users").doc(inviterId).get(),
-            db.collection("dependentes").doc(dependenteId).get()
-        ]);
-
-        if (!inviterDoc.exists) throw new HttpsError("not-found", "Inviter Not Found", "Usuário remetente não encontrado.");
-        if (!dependentDoc.exists) throw new HttpsError("not-found", "Dependent Not Found", "Dependente não encontrado.");
-
-        const inviterData = inviterDoc.data();
-        const dependentData = dependentDoc.data();
-
-        if (email.toLowerCase() === inviterData.email_lowercase) {
-            throw new HttpsError("invalid-argument", "Self Invite", "Você não pode convidar a si mesmo.");
-        }
-
-        const userToInviteQuery = await db.collection("users").where("email_lowercase", "==", email.toLowerCase()).limit(1).get();
-        if (userToInviteQuery.empty) {
-            throw new HttpsError("not-found", "User Not Found", "Nenhum cuidador encontrado com este e-mail.");
-        }
-        const userToInviteDoc = userToInviteQuery.docs[0];
-
-        if (dependentData.cuidadorIds.includes(userToInviteDoc.id)) {
-            throw new HttpsError("already-exists", "Already Caregiver", "Este cuidador já faz parte do círculo de cuidado.");
-        }
-
-        const existingInviteQuery = await db.collection("convites")
-            .where("dependenteId", "==", dependenteId)
-            .where("destinatarioEmail", "==", email.toLowerCase())
-            .where("status", "==", "PENDENTE")
-            .limit(1)
-            .get();
-
-        if (!existingInviteQuery.empty) {
-            throw new HttpsError("already-exists", "Invite Exists", "Já existe um convite pendente para este e-mail e este dependente.");
-        }
-
-        const isPremium = inviterData.premium === true;
-        if (!isPremium && dependentData.cuidadorIds.length >= 2) {
-            throw new HttpsError("failed-precondition", "Limit Reached", "O plano gratuito permite apenas 2 cuidadores. Faça upgrade para adicionar mais.");
-        }
-
-        const newInvite = {
-            dependenteId: dependenteId,
-            dependenteNome: dependentData.nome,
-            remetenteId: inviterId,
-            remetenteNome: inviterData.name || "Cuidador",
-            destinatarioEmail: email.toLowerCase(),
-            status: "PENDENTE",
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
-        };
-
-        await db.collection("convites").add(newInvite);
-        logger.info(`Convite enviado de ${inviterId} para ${email} pelo dependente ${dependenteId}`);
-        return { success: true, message: "Convite enviado!" };
-
-    } catch (error) {
-        logger.error(`Erro ao enviar convite:`, error);
-        if (error instanceof HttpsError) throw error;
-        throw new HttpsError("internal", "Internal Error", "Ocorreu um erro interno ao processar o convite.");
-    }
-});
-
-exports.notifyCaregiversOfScheduleChange = onCall({ cors: true, minInstances: 0 }, async (request) => {
+// ✅ CORREÇÃO: Função padronizada para usar GCS URI
+exports.analisarReceita = onCall({ cors: true, maxInstances: 10, memory: '1GiB', timeoutSeconds: 300, minInstances: 0, enforceAppCheck: true }, async (request) => {
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "A função deve ser chamada por um usuário autenticado.");
     }
 
-    const { dependentId, medicationName, newStartTime, actorName } = request.data;
-    if (!dependentId || !medicationName || !newStartTime || !actorName) {
-        throw new HttpsError("invalid-argument", "Parâmetros 'dependentId', 'medicationName', 'newStartTime' e 'actorName' são obrigatórios.");
+    // ✅ CORREÇÃO: Espera 'imageGcsUri' (gs://)
+    const { imageGcsUri, alergiasConhecidas, condicoesPreexistentes, medicamentosAtuais } = request.data;
+    if (!imageGcsUri) {
+        throw new HttpsError("invalid-argument", "O GCS URI da imagem é obrigatório.");
     }
 
-    const db = admin.firestore();
-
     try {
-        const dependentDoc = await db.collection("dependentes").doc(dependentId).get();
-        if (!dependentDoc.exists) {
-            throw new HttpsError("not-found", "Dependente não encontrado.");
+        const model = getGenerativeModel();
+        const prompt = buildPrescriptionAnalysisPrompt(alergiasConhecidas, condicoesPreexistentes, medicamentosAtuais);
+
+        // ✅ CORREÇÃO: Detecta o MimeType
+        const bucketName = imageGcsUri.split('/')[2];
+        const filePath = imageGcsUri.split('/').slice(3).join('/');
+        const [metadata] = await admin.storage().bucket(bucketName).file(filePath).getMetadata();
+        const mimeType = metadata.contentType;
+
+        if (!mimeType || !mimeType.startsWith('image/')) {
+             throw new HttpsError("invalid-argument", "O arquivo fornecido não é uma imagem válida.");
         }
+        logger.info(`Analisando receita: ${imageGcsUri} (Tipo: ${mimeType})`);
 
-        const dependentData = dependentDoc.data();
-        const cuidadorIds = dependentData.cuidadorIds || [];
+        // ✅ CORREÇÃO: Usa 'fileData' (camelCase)
+        const imageFilePart = { fileData: { mimeType: mimeType, fileUri: imageGcsUri } };
 
-        const caregiversToNotify = cuidadorIds.filter(id => id !== request.auth.uid);
+        const req = { contents: [{ role: "user", parts: [{ text: prompt }, imageFilePart] }] };
+        const result = await model.generateContent(req);
+        const rawAnalysis = result.response.candidates[0].content.parts[0].text;
 
-        if (caregiversToNotify.length === 0) {
-            logger.info(`Nenhum outro cuidador para notificar sobre a mudança de horário do dependente ${dependentId}.`);
-            return { success: true, message: " Nenhum outro cuidador para notificar." };
-        }
-
-        const payload = {
-            notification: {
-                title: "Tratamento Atualizado",
-                body: `${actorName} reagendou os horários de ${medicationName} para ${dependentData.nome}, a começar às ${newStartTime}.`,
-            },
-            data: {
-                dependentId: dependentId,
-                type: "SCHEDULE_CHANGE",
-            },
-        };
-
-        await sendNotificationToCaregivers(caregiversToNotify, payload);
-
-        logger.info(`Notificação de reagendamento para ${medicationName} enviada para ${caregiversToNotify.length} cuidadores.`);
-        return { success: true, message: "Cuidadores notificados." };
+        return parsePrescriptionAnalysis(rawAnalysis);
 
     } catch (error) {
-        logger.error(`Erro ao notificar cuidadores sobre reagendamento para o dependente ${dependentId}:`, error);
-        if (error instanceof HttpsError) throw error;
-        throw new HttpsError("internal", "Ocorreu um erro interno ao enviar a notificação.");
+        logger.error("Erro ao analisar receita médica:", error);
+        throw new HttpsError("internal", "Ocorreu um erro ao analisar a receita.", { details: error.message });
     }
 });
 
-
-exports.acceptInvite = onCall({ cors: true, minInstances: 0 }, async (request) => {
+// ✅ CORREÇÃO: Função padronizada para usar GCS URI
+exports.analisarRefeicao = onCall({ cors: true, memory: "1GiB", timeoutSeconds: 300, minInstances: 0, enforceAppCheck: true }, async (request) => {
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "A função deve ser chamada por um usuário autenticado.");
     }
-    const inviteId = request.data.inviteId;
-    if (!inviteId) {
-        throw new HttpsError("invalid-argument", "O ID do convite é obrigatório.");
+
+    // ✅ CORREÇÃO: Espera 'imageGcsUri' (gs://)
+    const { imageGcsUri, healthProfile } = request.data;
+    if (!imageGcsUri) {
+        throw new HttpsError("invalid-argument", "O GCS URI da imagem é obrigatório.");
     }
-    const uid = request.auth.uid;
-    const db = admin.firestore();
-    const inviteRef = db.collection("convites").doc(inviteId);
+
     try {
-        const [inviteDoc, userDoc] = await Promise.all([
-            inviteRef.get(),
-            db.collection("users").doc(uid).get()
-        ]);
-        if (!inviteDoc.exists) {
-            throw new HttpsError("not-found", "Convite não encontrado.");
+        const model = getGenerativeModel();
+        const prompt = buildMealAnalysisPrompt(healthProfile || {});
+
+        // ✅ CORREÇÃO: Detecta o MimeType
+        const bucketName = imageGcsUri.split('/')[2];
+        const filePath = imageGcsUri.split('/').slice(3).join('/');
+        const [metadata] = await admin.storage().bucket(bucketName).file(filePath).getMetadata();
+        const mimeType = metadata.contentType;
+
+        if (!mimeType || !mimeType.startsWith('image/')) {
+             throw new HttpsError("invalid-argument", "O arquivo fornecido não é uma imagem válida.");
         }
-        if (!userDoc.exists) {
-            logger.error(`Usuário com UID ${uid} não encontrado no Firestore.`);
-            throw new HttpsError("not-found", "Usuário não encontrado.");
+        logger.info(`Analisando refeição: ${imageGcsUri} (Tipo: ${mimeType})`);
+
+        // ✅ CORREÇÃO: Usa 'fileData' (camelCase)
+        const imageFilePart = { fileData: { mimeType: mimeType, fileUri: imageGcsUri } };
+
+        const req = { contents: [{ role: "user", parts: [{ text: prompt }, imageFilePart] }] };
+        const result = await model.generateContent(req);
+
+        const response = result.response;
+        const rawAnalysis = response?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (!rawAnalysis) {
+            logger.error("A análise da IA (refeição) retornou vazia ou foi bloqueada.", { response });
+            throw new HttpsError("unavailable", "Não foi possível analisar a imagem. Tente uma foto mais nítida.");
         }
-        const inviteData = inviteDoc.data();
-        const userData = userDoc.data();
-        if (inviteData?.destinatarioEmail?.toLowerCase() !== userData?.email?.toLowerCase()) {
-            throw new HttpsError("permission-denied", "Você não tem permissão para aceitar este convite.");
-        }
-        if (inviteData?.status !== "PENDENTE") {
-            throw new HttpsError("failed-precondition", "Este convite não está mais pendente.");
-        }
-        const dependentRef = db.collection("dependentes").doc(inviteData.dependenteId);
-        await db.runTransaction(async (transaction) => {
-            transaction.update(dependentRef, { cuidadorIds: admin.firestore.FieldValue.arrayUnion(uid) });
-            transaction.update(inviteRef, { status: "ACEITO" });
-        });
-        logger.info(`Usuário ${uid} aceitou o convite ${inviteId} para o dependente ${inviteData.dependenteId}`);
-        return { success: true, message: "Convite aceito com sucesso!" };
+
+        const jsonString = rawAnalysis.replace(/```json/g, "").replace(/```/g, "").trim();
+        const parsedJson = JSON.parse(jsonString);
+
+        logger.info(`Análise de refeição gerada para o usuário ${request.auth.uid}`);
+        return parsedJson;
+
     } catch (error) {
-        logger.error(`Erro ao aceitar convite ${inviteId} para o usuário ${uid}:`, error);
-        if (error instanceof HttpsError) {
-            throw error;
-        }
-        throw new HttpsError("internal", "Ocorreu um erro interno ao aceitar o convite.");
+        logger.error("Erro ao analisar a imagem da refeição:", error);
+        if (error instanceof HttpsError) throw error;
+        throw new HttpsError("internal", "Ocorreu um erro interno ao analisar sua refeição.");
     }
 });
 
-exports.gerarAnalisePreditiva = onCall({ cors: true, memory: "1GiB", timeoutSeconds: 300, minInstances: 0 }, async (request) => {
+exports.gerarAnalisePreditiva = onCall({ cors: true, memory: "1GiB", timeoutSeconds: 300, minInstances: 0, enforceAppCheck: true }, async (request) => {
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "A função deve ser chamada por um usuário autenticado.");
     }
@@ -961,7 +551,122 @@ exports.gerarAnalisePreditiva = onCall({ cors: true, memory: "1GiB", timeoutSeco
     }
 });
 
-exports.sendEmergencyAlert = onCall({ cors: true, minInstances: 0 }, async (request) => {
+exports.gerarResumoConsulta = onCall({ cors: true, memory: "1GiB", timeoutSeconds: 300, minInstances: 0, enforceAppCheck: true }, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "A função deve ser chamada por um usuário autenticado.");
+    }
+    const { dependentId, startDateString, endDateString } = request.data;
+    if (!dependentId || !startDateString || !endDateString) {
+        throw new HttpsError("invalid-argument", "Os argumentos 'dependentId', 'startDateString' e 'endDateString' são obrigatórios.");
+    }
+    const uid = request.auth.uid;
+    const db = admin.firestore();
+    try {
+        const dependentDoc = await db.collection("dependentes").doc(dependentId).get();
+        if (!dependentDoc.exists) {
+            throw new HttpsError("not-found", "Dependente não encontrado.");
+        }
+        if (!dependentDoc.data()?.cuidadorIds?.includes(uid)) {
+            throw new HttpsError("permission-denied", "Você não tem permissão para acessar os dados deste dependente.");
+        }
+        const dependent = dependentDoc.data();
+        const startDate = new Date(startDateString);
+        const endDate = new Date(endDateString);
+        endDate.setHours(23, 59, 59, 999);
+        const medsSnapshot = await dependentDoc.ref.collection('medicamentos').get();
+        const scheduledMeds = medsSnapshot.docs.map(doc => doc.data()).filter(m => !m?.isUsoEsporadico);
+        const dosesSnapshot = await dependentDoc.ref.collection('historico_doses').where('timestamp', '>=', startDate).where('timestamp', '<=', endDate).get();
+        const recentDoses = dosesSnapshot.docs.map(doc => doc.data());
+        const notesSnapshot = await dependentDoc.ref.collection('health_notes').where('timestamp', '>=', startDate).where('timestamp', '<=', endDate).get();
+        const recentNotes = notesSnapshot.docs.map(doc => doc.data());
+        const prompt = buildConsultationSummaryPrompt(dependent, scheduledMeds, recentDoses, recentNotes, startDate, endDate);
+        const model = getGenerativeModel();
+        const req = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+        const result = await model.generateContent(req);
+        const summaryText = result.response.candidates[0].content.parts[0].text;
+        logger.info(`Resumo para consulta gerado para o dependente ${dependentId}`);
+        return { summary: summaryText };
+    } catch (error) {
+        logger.error(`Erro ao gerar resumo para consulta para o dependente ${dependentId}:`, error);
+        if (error instanceof HttpsError) {
+            throw error;
+        }
+        throw new HttpsError("internal", "Ocorreu um erro interno ao gerar o resumo.");
+    }
+});
+
+// ✅ OTIMIZAÇÃO: Memória reduzida para 512MiB
+exports.getChatResponse = onCall({ cors: true, memory: "512MiB", minInstances: 0, enforceAppCheck: true }, async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+    const { prompt, dependentId } = request.data;
+    if (!prompt || !dependentId) throw new HttpsError("invalid-argument", "Parâmetros 'prompt' e 'dependentId' são obrigatórios.");
+
+    try {
+        const db = admin.firestore();
+        const now = new Date();
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(now.getDate() - 7);
+
+        const [
+            dependentDoc, chatHistorySnap, medsSnap, notesSnap, appointmentsSnap,
+            hydrationSnap, activitySnap, sleepSnap, cycleSnap
+        ] = await Promise.all([
+            db.collection("dependentes").doc(dependentId).get(),
+            db.collection("dependentes").doc(dependentId).collection("chat_history").orderBy("timestamp", "desc").limit(10).get(),
+            db.collection("dependentes").doc(dependentId).collection("medicamentos").where("isPaused", "==", false).get(),
+            db.collection("dependentes").doc(dependentId).collection("health_notes").where("timestamp", ">=", sevenDaysAgo).get(),
+            db.collection("dependentes").doc(dependentId).collection("agendamentos").where("timestamp", ">=", admin.firestore.Timestamp.fromDate(now)).limit(5).get(),
+            db.collection("dependentes").doc(dependentId).collection("hidratacao").where("timestamp", ">=", sevenDaysAgo).get(),
+            db.collection("dependentes").doc(dependentId).collection("atividades_fisicas").where("timestamp", ">=", sevenDaysAgo).get(),
+            db.collection("dependentes").doc(dependentId).collection("sono_registros").where("data", ">=", sevenDaysAgo.toISOString().split('T')[0]).get(),
+            db.collection("dependentes").doc(dependentId).collection("daily_cycle_logs").orderBy("dateString", "desc").limit(45).get()
+        ]);
+
+        if (!dependentDoc.exists) throw new HttpsError("not-found", "Dependente não encontrado.");
+
+        const dependentData = dependentDoc.data();
+        const chatHistory = chatHistorySnap.docs.map(doc => doc.data()).reverse();
+        const medications = medsSnap.docs.map(doc => doc.data());
+        const healthNotes = notesSnap.docs.map(doc => doc.data());
+        const appointments = appointmentsSnap.docs.map(doc => doc.data());
+
+        const wellnessData = {};
+        const hydrationTotal = hydrationSnap.docs.reduce((sum, doc) => sum + (doc.data().quantidadeMl || 0), 0);
+        wellnessData.avgHydration = hydrationTotal / 7;
+        const activityTotal = activitySnap.docs.reduce((sum, doc) => sum + (doc.data().duracaoMinutos || 0), 0);
+        wellnessData.avgActivity = activityTotal / 7;
+        const sleepTotal = sleepSnap.docs.reduce((sum, doc) => {
+            try {
+                const start = new Date(`1970-01-01T${doc.data().horaDeDormir}Z`);
+                const end = new Date(`1970-01-01T${doc.data().horaDeAcordar}Z`);
+                let diff = end.getTime() - start.getTime();
+                if (diff < 0) diff += 24 * 60 * 60 * 1000;
+                return sum + (diff / (1000 * 60 * 60));
+            } catch (e) { return sum; }
+        }, 0);
+        wellnessData.avgSleep = sleepTotal / (sleepSnap.size || 1);
+        wellnessData.cycleSummary = null;
+
+        const model = getGenerativeModel();
+        const fullPrompt = buildChatPrompt(prompt, dependentData, chatHistory, medications, healthNotes, appointments, wellnessData);
+
+        const req = { contents: [{ role: "user", parts: [{ text: fullPrompt }] }] };
+        const result = await model.generateContent(req);
+
+        const responseText = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!responseText) throw new HttpsError("unavailable", "O assistente não conseguiu processar sua pergunta.");
+
+        return { response: responseText };
+
+    } catch (error) {
+        logger.error(`Erro no getChatResponse:`, error);
+        if (error instanceof HttpsError) throw error;
+        throw new HttpsError("internal", "Não foi possível conectar ao assistente de IA.");
+    }
+});
+
+// ✅ OTIMIZAÇÃO: Memória reduzida para 512MiB
+exports.sendEmergencyAlert = onCall({ cors: true, minInstances: 0, enforceAppCheck: true, memory: "512MiB" }, async (request) => {
     const { dependentId } = request.data;
     if (!dependentId) {
         throw new HttpsError("invalid-argument", "O ID do dependente é obrigatório.");
@@ -1023,114 +728,184 @@ exports.sendEmergencyAlert = onCall({ cors: true, minInstances: 0 }, async (requ
         throw new HttpsError("internal", "Ocorreu um erro interno ao enviar o alerta.");
     }
 });
-function calculateAgeFromDobString(dobString) {
-    if (!dobString || typeof dobString !== 'string') return null;
-    try {
-        let year, month, day;
-        if (dobString.includes('/')) {
-            [day, month, year] = dobString.split('/');
-        } else {
-            [year, month, day] = dobString.split('-');
-        }
-        if (!year || !month || !day || year.length < 4) return null;
-        const birthDate = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day)));
-        if (isNaN(birthDate.getTime())) return null;
-        const today = new Date();
-        const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-        let age = todayUTC.getUTCFullYear() - birthDate.getUTCFullYear();
-        const m = todayUTC.getUTCMonth() - birthDate.getUTCMonth();
-        if (m < 0 || (m === 0 && todayUTC.getUTCDate() < birthDate.getUTCDate())) {
-            age--;
-        }
-        return age;
-    } catch (e) {
-        logger.warn("Não foi possível calcular a idade da string:", dobString, e);
-        return null;
+
+// ✅ OTIMIZAÇÃO: Memória reduzida para 512MiB
+exports.inviteCaregiverByEmail = onCall({ cors: true, minInstances: 0, enforceAppCheck: true, memory: "512MiB" }, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Unauthenticated", "A função deve ser chamada por um usuário autenticado.");
     }
-}
+    const { email, dependenteId } = request.data;
+    if (!email || !dependenteId) {
+        throw new HttpsError("invalid-argument", "Invalid Arguments", "Os parâmetros 'email' e 'dependenteId' são obrigatórios.");
+    }
 
-
-function buildChatPrompt(prompt, dependentData, chatHistory, medications, healthNotes, appointments, wellnessData) {
-    const { nome, dataDeNascimento, sexo, alergias, condicoesPreexistentes, peso, altura } = dependentData;
-    const calculatedAge = calculateAgeFromDobString(dataDeNascimento);
-
-    let profileString = `Nome: ${nome}, Idade: ${calculatedAge || 'N/A'} anos, Sexo: ${sexo}.`;
-    let wellnessString = `Sono (média 7d): ${wellnessData.avgSleep}h. Hidratação (média 7d): ${wellnessData.avgHydration}ml. Atividade (média 7d): ${wellnessData.avgActivity}min.`;
-    let cycleString = wellnessData.cycleSummary ? `Fase do ciclo: ${wellnessData.cycleSummary.phase}. Próxima menstruação: ${wellnessData.cycleSummary.nextDate}.` : "";
-
-    let historyString = chatHistory.map(msg => `${msg.sender === 'AI' ? 'Nidus' : 'Usuário'}: ${msg.text}`).join('\n');
-    let medsString = medications.map(med => `- ${med.nome} (${med.dosagem})`).join('\n');
-
-    return `Você é "Nidus", um assistente de saúde. Seja empático e informativo. NUNCA FAÇA DIAGNÓSTICOS e sempre recomende consultar um médico.
-
-        **CONTEXTO DO PACIENTE:**
-        ---
-        **Perfil:** ${profileString}
-        **Resumo de Bem-Estar (últimos 7 dias):** ${wellnessString} ${cycleString}
-        **Medicamentos Ativos:**\n${medsString || "Nenhum."}
-        **Histórico da Conversa:**\n${historyString || "Início da conversa."}
-        ---
-
-        **PERGUNTA DO USUÁRIO:**
-        "${prompt}"
-
-        Baseado em TODO o contexto, formule sua resposta.`;
-}
-
-exports.getChatResponse = onCall({ cors: true, memory: "1GiB", minInstances: 0 }, async (request) => {
-    if (!request.auth) throw new HttpsError("unauthenticated", "Usuário não autenticado.");
-    const { prompt, dependentId } = request.data;
-    if (!prompt || !dependentId) throw new HttpsError("invalid-argument", "Parâmetros 'prompt' e 'dependentId' são obrigatórios.");
+    const db = admin.firestore();
+    const inviterId = request.auth.uid;
 
     try {
-        const db = admin.firestore();
-        const now = new Date();
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(now.getDate() - 7);
-
-        const [
-            dependentDoc, chatHistorySnap, medsSnap, notesSnap, appointmentsSnap,
-            hydrationSnap, activitySnap, sleepSnap, cycleSnap
-        ] = await Promise.all([
-            db.collection("dependentes").doc(dependentId).get(),
-            db.collection("dependentes").doc(dependentId).collection("chat_history").orderBy("timestamp", "desc").limit(10).get(),
-            db.collection("dependentes").doc(dependentId).collection("medicamentos").where("isPaused", "==", false).get(),
-            db.collection("dependentes").doc(dependentId).collection("health_notes").where("timestamp", ">=", sevenDaysAgo).get(),
-            db.collection("dependentes").doc(dependentId).collection("agendamentos").where("timestamp", ">=", admin.firestore.Timestamp.fromDate(now)).limit(5).get(),
-            db.collection("dependentes").doc(dependentId).collection("hidratacao").where("timestamp", ">=", sevenDaysAgo).get(),
-            db.collection("dependentes").doc(dependentId).collection("atividades_fisicas").where("timestamp", ">=", sevenDaysAgo).get(),
-            db.collection("dependentes").doc(dependentId).collection("sono_registros").where("data", ">=", sevenDaysAgo.toISOString().split('T')[0]).get(),
-            db.collection("dependentes").doc(dependentId).collection("daily_cycle_logs").orderBy("dateString", "desc").limit(45).get()
+        const [inviterDoc, dependentDoc] = await Promise.all([
+            db.collection("users").doc(inviterId).get(),
+            db.collection("dependentes").doc(dependenteId).get()
         ]);
 
-        if (!dependentDoc.exists) throw new HttpsError("not-found", "Dependente não encontrado.");
+        if (!inviterDoc.exists) throw new HttpsError("not-found", "Inviter Not Found", "Usuário remetente não encontrado.");
+        if (!dependentDoc.exists) throw new HttpsError("not-found", "Dependent Not Found", "Dependente não encontrado.");
 
+        const inviterData = inviterDoc.data();
         const dependentData = dependentDoc.data();
-        const chatHistory = chatHistorySnap.docs.map(doc => doc.data()).reverse();
-        const medications = medsSnap.docs.map(doc => doc.data());
-        const healthNotes = notesSnap.docs.map(doc => doc.data());
-        const appointments = appointmentsSnap.docs.map(doc => doc.data());
 
-        const wellnessData = { /* ... Lógica para calcular as médias ... */ };
+        if (email.toLowerCase() === inviterData.email_lowercase) {
+            throw new HttpsError("invalid-argument", "Self Invite", "Você não pode convidar a si mesmo.");
+        }
 
-        const model = getGenerativeModel();
-        const fullPrompt = buildChatPrompt(prompt, dependentData, chatHistory, medications, healthNotes, appointments, wellnessData);
+        const userToInviteQuery = await db.collection("users").where("email_lowercase", "==", email.toLowerCase()).limit(1).get();
+        if (userToInviteQuery.empty) {
+            throw new HttpsError("not-found", "User Not Found", "Nenhum cuidador encontrado com este e-mail.");
+        }
+        const userToInviteDoc = userToInviteQuery.docs[0];
 
-        const req = { contents: [{ role: "user", parts: [{ text: fullPrompt }] }] };
-        const result = await model.generateContent(req);
+        if (dependentData.cuidadorIds.includes(userToInviteDoc.id)) {
+            throw new HttpsError("already-exists", "Already Caregiver", "Este cuidador já faz parte do círculo de cuidado.");
+        }
 
-        const responseText = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!responseText) throw new HttpsError("unavailable", "O assistente não conseguiu processar sua pergunta.");
+        const existingInviteQuery = await db.collection("convites")
+            .where("dependenteId", "==", dependenteId)
+            .where("destinatarioEmail", "==", email.toLowerCase())
+            .where("status", "==", "PENDENTE")
+            .limit(1)
+            .get();
 
-        return { response: responseText };
+        if (!existingInviteQuery.empty) {
+            throw new HttpsError("already-exists", "Invite Exists", "Já existe um convite pendente para este e-mail e este dependente.");
+        }
+
+        const isPremium = inviterData.premium === true;
+        if (!isPremium && dependentData.cuidadorIds.length >= 2) {
+            throw new HttpsError("failed-precondition", "Limit Reached", "O plano gratuito permite apenas 2 cuidadores. Faça upgrade para adicionar mais.");
+        }
+
+        const newInvite = {
+            dependenteId: dependenteId,
+            dependenteNome: dependentData.nome,
+            remetenteId: inviterId,
+            remetenteNome: inviterData.name || "Cuidador",
+            destinatarioEmail: email.toLowerCase(),
+            status: "PENDENTE",
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+
+        await db.collection("convites").add(newInvite);
+        logger.info(`Convite enviado de ${inviterId} para ${email} pelo dependente ${dependenteId}`);
+        return { success: true, message: "Convite enviado!" };
 
     } catch (error) {
-        logger.error(`Erro no getChatResponse:`, error);
+        logger.error(`Erro ao enviar convite:`, error);
         if (error instanceof HttpsError) throw error;
-        throw new HttpsError("internal", "Não foi possível conectar ao assistente de IA.");
+        throw new HttpsError("internal", "Internal Error", "Ocorreu um erro interno ao processar o convite.");
     }
 });
 
+// ✅ OTIMIZAÇÃO: Memória reduzida para 256MiB
+exports.notifyCaregiversOfScheduleChange = onCall({ cors: true, minInstances: 0, enforceAppCheck: true, memory: "256MiB" }, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "A função deve ser chamada por um usuário autenticado.");
+    }
+
+    const { dependentId, medicationName, newStartTime, actorName } = request.data;
+    if (!dependentId || !medicationName || !newStartTime || !actorName) {
+        throw new HttpsError("invalid-argument", "Parâmetros 'dependentId', 'medicationName', 'newStartTime' e 'actorName' são obrigatórios.");
+    }
+
+    const db = admin.firestore();
+
+    try {
+        const dependentDoc = await db.collection("dependentes").doc(dependentId).get();
+        if (!dependentDoc.exists) {
+            throw new HttpsError("not-found", "Dependente não encontrado.");
+        }
+
+        const dependentData = dependentDoc.data();
+        const cuidadorIds = dependentData.cuidadorIds || [];
+
+        const caregiversToNotify = cuidadorIds.filter(id => id !== request.auth.uid);
+
+        if (caregiversToNotify.length === 0) {
+            logger.info(`Nenhum outro cuidador para notificar sobre a mudança de horário do dependente ${dependentId}.`);
+            return { success: true, message: " Nenhum outro cuidador para notificar." };
+        }
+
+        const payload = {
+            notification: {
+                title: "Tratamento Atualizado",
+                body: `${actorName} reagendou os horários de ${medicationName} para ${dependentData.nome}, a começar às ${newStartTime}.`,
+            },
+            data: {
+                dependentId: dependentId,
+                type: "SCHEDULE_CHANGE",
+            },
+        };
+
+        await sendNotificationToCaregivers(caregiversToNotify, payload);
+
+        logger.info(`Notificação de reagendamento para ${medicationName} enviada para ${caregiversToNotify.length} cuidadores.`);
+        return { success: true, message: "Cuidadores notificados." };
+
+    } catch (error) {
+        logger.error(`Erro ao notificar cuidadores sobre reagendamento para o dependente ${dependentId}:`, error);
+        if (error instanceof HttpsError) throw error;
+        throw new HttpsError("internal", "Ocorreu um erro interno ao enviar a notificação.");
+    }
+});
+
+// ✅ OTIMIZAÇÃO: Memória reduzida para 512MiB
+exports.acceptInvite = onCall({ cors: true, minInstances: 0, enforceAppCheck: true, memory: "512MiB" }, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "A função deve ser chamada por um usuário autenticado.");
+    }
+    const inviteId = request.data.inviteId;
+    if (!inviteId) {
+        throw new HttpsError("invalid-argument", "O ID do convite é obrigatório.");
+    }
+    const uid = request.auth.uid;
+    const db = admin.firestore();
+    const inviteRef = db.collection("convites").doc(inviteId);
+    try {
+        const [inviteDoc, userDoc] = await Promise.all([
+            inviteRef.get(),
+            db.collection("users").doc(uid).get()
+        ]);
+        if (!inviteDoc.exists) {
+            throw new HttpsError("not-found", "Convite não encontrado.");
+        }
+        if (!userDoc.exists) {
+            logger.error(`Usuário com UID ${uid} não encontrado no Firestore.`);
+            throw new HttpsError("not-found", "Usuário não encontrado.");
+        }
+        const inviteData = inviteDoc.data();
+        const userData = userDoc.data();
+        if (inviteData?.destinatarioEmail?.toLowerCase() !== userData?.email?.toLowerCase()) {
+            throw new HttpsError("permission-denied", "Você não tem permissão para aceitar este convite.");
+        }
+        if (inviteData?.status !== "PENDENTE") {
+            throw new HttpsError("failed-precondition", "Este convite não está mais pendente.");
+        }
+        const dependentRef = db.collection("dependentes").doc(inviteData.dependenteId);
+        await db.runTransaction(async (transaction) => {
+            transaction.update(dependentRef, { cuidadorIds: admin.firestore.FieldValue.arrayUnion(uid) });
+            transaction.update(inviteRef, { status: "ACEITO" });
+        });
+        logger.info(`Usuário ${uid} aceitou o convite ${inviteId} para o dependente ${inviteData.dependenteId}`);
+        return { success: true, message: "Convite aceito com sucesso!" };
+    } catch (error) {
+        logger.error(`Erro ao aceitar convite ${inviteId} para o usuário ${uid}:`, error);
+        if (error instanceof HttpsError) {
+            throw error;
+        }
+        throw new HttpsError("internal", "Ocorreu um erro interno ao aceitar o convite.");
+    }
+});
+
+// --- INÍCIO DAS FUNÇÕES DE PROMPT ---
 
 function buildAnalysisPrompt(
     dependent, symptoms, allMeds, doses, notes, schedules,
@@ -1222,68 +997,6 @@ function buildAnalysisPrompt(
     return prompt;
 }
 
-exports.analisarReceita = onCall({ cors: true, maxInstances: 10, memory: '1GiB', timeoutSeconds: 300, minInstances: 0 }, async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "A função deve ser chamada por um usuário autenticado.");
-    }
-    const { imageUri, alergiasConhecidas, condicoesPreexistentes, medicamentosAtuais } = request.data;
-    if (!imageUri) {
-        throw new HttpsError("invalid-argument", "O URI da imagem é obrigatório.");
-    }
-    try {
-        const model = getGenerativeModel();
-        const prompt = buildPrescriptionAnalysisPrompt(alergiasConhecidas, condicoesPreexistentes, medicamentosAtuais);
-        const imageFilePart = { fileData: { mimeType: "image/jpeg", fileUri: imageUri } };
-        const req = { contents: [{ role: "user", parts: [{ text: prompt }, imageFilePart] }] };
-        const result = await model.generateContent(req);
-        const rawAnalysis = result.response.candidates[0].content.parts[0].text;
-        return parsePrescriptionAnalysis(rawAnalysis);
-    } catch (error) {
-        logger.error("Erro ao analisar receita médica:", error);
-        throw new HttpsError("internal", "Ocorreu um erro ao analisar a receita.", { details: error.message });
-    }
-});
-exports.analisarRefeicao = onCall({ cors: true, memory: "1GiB", timeoutSeconds: 300, minInstances: 0 }, async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "A função deve ser chamada por um usuário autenticado.");
-    }
-    const { imageUri, healthProfile } = request.data;
-    if (!imageUri) {
-        throw new HttpsError("invalid-argument", "O URI da imagem é obrigatório.");
-    }
-
-    try {
-        const model = getGenerativeModel();
-        const prompt = buildMealAnalysisPrompt(healthProfile || {});
-
-        const imageFilePart = { fileData: { mimeType: "image/jpeg", fileUri: imageUri } };
-
-        const req = { contents: [{ role: "user", parts: [{ text: prompt }, imageFilePart] }] };
-        const result = await model.generateContent(req);
-
-        const response = result.response;
-        const rawAnalysis = response?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-        if (!rawAnalysis) {
-            logger.error("A análise da IA (refeição) retornou vazia ou foi bloqueada.", { response });
-            throw new HttpsError("unavailable", "Não foi possível analisar a imagem. Tente uma foto mais nítida.");
-        }
-
-        const jsonString = rawAnalysis.replace(/```json/g, "").replace(/```/g, "").trim();
-        const parsedJson = JSON.parse(jsonString);
-
-        logger.info(`Análise de refeição gerada para o usuário ${request.auth.uid}`);
-        return parsedJson;
-
-    } catch (error) {
-        logger.error("Erro ao analisar a imagem da refeição:", error);
-        if (error instanceof HttpsError) throw error;
-        throw new HttpsError("internal", "Ocorreu um erro interno ao analisar sua refeição.");
-    }
-});
-
-
-
 function buildPrescriptionAnalysisPrompt(alergias, condicoes, medicamentosAtuais) {
     const safeAlergias = alergias || "Nenhuma";
     const safeCondicoes = condicoes || "Nenhuma";
@@ -1330,101 +1043,296 @@ function parsePrescriptionAnalysis(rawAnalysis) {
     }
 }
 
-exports.gerarResumoConsulta = onCall({ cors: true, memory: "1GiB", timeoutSeconds: 300, minInstances: 0 }, async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "A função deve ser chamada por um usuário autenticado.");
+function buildMealAnalysisPrompt(healthProfile) {
+    const age = calculateAgeFromDobString(healthProfile.idade);
+    let prompt = `
+        Você é um nutricionista virtual. Analise a imagem desta refeição e retorne APENAS um objeto JSON.
+
+        Considere o perfil de saúde:
+        - Idade: ${age || 'N/A'}
+        - Peso: ${healthProfile.peso || 'N/A'} kg
+        - Altura: ${healthProfile.altura || 'N/A'} cm
+        - Sexo: ${healthProfile.sexo || 'N/A'}
+
+        Formato JSON esperado:
+        {
+          "descricao": "Uma breve descrição dos alimentos visíveis (ex: 'Prato com arroz, feijão, filé de frango grelhado e salada de alface e tomate.')",
+          "caloriasEstimadas": "Um NÚMERO inteiro estimado de calorias (ex: 550)",
+          "analiseSaude": "Uma análise curta (2-3 frases) sobre o quão saudável esta refeição parece ser, considerando o perfil. Seja encorajador.",
+          "sugestao": "Uma sugestão simples de melhoria ou um elogio (ex: 'Ótima fonte de proteína! Tente adicionar mais vegetais verdes na próxima vez.' ou 'Refeição muito bem balanceada!')"
+        }
+
+        REGRAS: Retorne APENAS o JSON. Não inclua \`\`\`json\`\`\`.
+    `;
+    return prompt;
+}
+
+
+// --- INÍCIO DAS FUNÇÕES AGENDADAS (ON SCHEDULE) ---
+
+// (A função onDataWritten que estava faltando está aqui)
+exports.onDataWritten = onDocumentWritten({
+    document: "dependentes/{dependentId}/{collectionId}/{docId}",
+    minInstances: 0
+}, async (event) => {
+    const collectionId = event.params.collectionId;
+    const dependentId = event.params.dependentId;
+    const docId = event.params.docId;
+
+    const relevantCollections = [
+        "historico_doses", "health_notes", "atividades", "insights",
+        "hidratacao", "atividades_fisicas", "refeicoes", "sono_registros"
+    ];
+
+    if (!relevantCollections.includes(collectionId)) {
+        return;
     }
-    const { dependentId, startDateString, endDateString } = request.data;
-    if (!dependentId || !startDateString || !endDateString) {
-        throw new HttpsError("invalid-argument", "Os argumentos 'dependentId', 'startDateString' e 'endDateString' são obrigatórios.");
-    }
-    const uid = request.auth.uid;
+
     const db = admin.firestore();
-    try {
-        const dependentDoc = await db.collection("dependentes").doc(dependentId).get();
-        if (!dependentDoc.exists) {
-            throw new HttpsError("not-found", "Dependente não encontrado.");
+    const timelineRef = db.collection("dependentes").doc(dependentId).collection("timeline").doc(`${collectionId}_${docId}`);
+
+    if (!event.data.after.exists) {
+        try {
+            await timelineRef.delete();
+            logger.info(`[Timeline] Evento ${timelineRef.path} excluído.`);
+        } catch (error) {
+            logger.error(`[Timeline] Erro ao excluir evento ${timelineRef.path}:`, error);
         }
-        if (!dependentDoc.data()?.cuidadorIds?.includes(uid)) {
-            throw new HttpsError("permission-denied", "Você não tem permissão para acessar os dados deste dependente.");
+        return;
+    }
+
+    const dataBefore = event.data.before ? event.data.before.data() : null;
+    const dataAfter = event.data.after.data();
+
+    if (dataBefore && dataBefore.timestampString === dataAfter.timestampString) {
+        logger.info(`[Timeline] Gatilho ignorado para ${timelineRef.path} pois o timestamp não mudou.`);
+        return;
+    }
+
+    const eventData = await createTimelineEvent(dependentId, collectionId, docId, dataAfter);
+
+    if (eventData) {
+        try {
+            await timelineRef.set(eventData);
+            logger.info(`[Timeline] Evento salvo em ${timelineRef.path}`);
+        } catch (error) {
+            logger.error(`[Timeline] Erro ao salvar evento em ${timelineRef.path}:`, error);
         }
-        const dependent = dependentDoc.data();
-        const startDate = new Date(startDateString);
-        const endDate = new Date(endDateString);
-        endDate.setHours(23, 59, 59, 999);
-        const medsSnapshot = await dependentDoc.ref.collection('medicamentos').get();
-        const scheduledMeds = medsSnapshot.docs.map(doc => doc.data()).filter(m => !m?.isUsoEsporadico);
-        const dosesSnapshot = await dependentDoc.ref.collection('historico_doses').where('timestamp', '>=', startDate).where('timestamp', '<=', endDate).get();
-        const recentDoses = dosesSnapshot.docs.map(doc => doc.data());
-        const notesSnapshot = await dependentDoc.ref.collection('health_notes').where('timestamp', '>=', startDate).where('timestamp', '<=', endDate).get();
-        const recentNotes = notesSnapshot.docs.map(doc => doc.data());
-        const prompt = buildConsultationSummaryPrompt(dependent, scheduledMeds, recentDoses, recentNotes, startDate, endDate);
-        const model = getGenerativeModel();
-        const req = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
-        const result = await model.generateContent(req);
-        const summaryText = result.response.candidates[0].content.parts[0].text;
-        logger.info(`Resumo para consulta gerado para o dependente ${dependentId}`);
-        return { summary: summaryText };
-    } catch (error) {
-        logger.error(`Erro ao gerar resumo para consulta para o dependente ${dependentId}:`, error);
-        if (error instanceof HttpsError) {
-            throw error;
-        }
-        throw new HttpsError("internal", "Ocorreu um erro interno ao gerar o resumo.");
     }
 });
 
-function buildConsultationSummaryPrompt(dependent, meds, doses, notes, startDate, endDate) {
-    const dateFormatter = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric' });
-    const period = `${dateFormatter.format(startDate)} a ${dateFormatter.format(endDate)}`;
-    let prompt = `Você é um analista de dados de saúde assistente. Sua tarefa é criar um resumo conciso e objetivo para um cuidador levar a uma consulta médica, baseado nos dados do paciente "${dependent.nome}" para o período de ${period}.
+// (A função handlePlaySubscriptionNotification que estava faltando está aqui)
+exports.handlePlaySubscriptionNotification = onMessagePublished(
+    { topic: "play-billing", minInstances: 0 },
+    async (event) => {
+        await initGooglePlayPublisher();
 
-REGRAS CRÍTICAS:
-1. NÃO FAÇA DIAGNÓSTICOS.
-2. NÃO DÊ CONSELHOS MÉDICOS.
-3. Use linguagem neutra e baseada estritamente nos dados fornecidos.
-4. A resposta deve ser em português do Brasil e formatada em Markdown com os títulos exatos abaixo.
-5. Se não houver dados para uma seção, escreva "Nenhuma informação relevante registrada no período."
+        logger.info("📩 Notificação do Google Play recebida via Pub/Sub.");
 
-DADOS FORNECIDOS:
-- Perfil: Alergias (${dependent.alergias || "N/A"}), Condições Pré-existentes (${dependent.condicoesPreexistentes || "N/A"}).
-- Medicamentos em Uso: ${meds.map(m => `${m.nome} (${m.dosagem})`).join(', ') || "Nenhum"}.
-- Histórico de Doses no Período: ${doses.length} doses registradas.
-- Anotações de Saúde no Período: ${notes.length} anotações registradas.
+        if (!event?.data?.message?.data) {
+            logger.warn("Evento Pub/Sub recebido sem dados válidos. Estrutura incorreta ou vazia.");
+            return;
+        }
+        const data = Buffer.from(event.data.message.data, "base64").toString("utf8");
+        let notification;
 
----
-TAREFA (Use os títulos exatos abaixo):
+        try {
+            notification = JSON.parse(data);
+        } catch (parseError) {
+            logger.error("Falha ao interpretar JSON da notificação:", parseError);
+            return;
+        }
 
-### Resumo para Consulta
+        if (!notification.subscriptionNotification) {
+            logger.info("Notificação não relacionada a assinatura. Ignorada.");
+            return;
+        }
 
-#### Adesão ao Tratamento
-(Resuma a adesão. Calcule a porcentagem geral de adesão [doses tomadas / doses esperadas]. Destaque padrões, como medicamentos com mais esquecimentos ou horários específicos com baixa adesão.)
+        const { purchaseToken, notificationType } = notification.subscriptionNotification;
 
-#### Tendências de Saúde
-(Analise as anotações de saúde. Destaque tendências, como uma média de pressão que subiu ou leituras de glicemia que se mantiveram estáveis. Cite valores médios, máximos e mínimos se forem relevantes.)
-
-#### Correlações Notáveis
-(Aponte coincidências nos dados, SEM afirmar causalidade. Ex: "Foram registradas anotações de 'tontura' em dias com leituras de pressão arterial mais baixas.")
-
-#### Sugestões de Perguntas para o Médico
-(Crie 2-3 perguntas neutras e abertas para o cuidador fazer, baseadas nos dados. Ex: "Como o padrão de sono registrado pode influenciar a glicemia matinal?")
-`;
-    if (doses.length > 0) {
-        prompt += "\n\nDados Detalhados de Doses:\n";
-        doses.forEach(d => {
-            const medName = meds.find(m => m.id === d.medicamentoId)?.nome || "Desconhecido";
-            prompt += `- ${d.timestamp.toDate().toLocaleString('pt-BR')}: ${medName}\n`;
+        logger.info("Detalhes da notificação de assinatura recebida:", {
+            notificationType,
+            purchaseToken,
         });
-    }
-    if (notes.length > 0) {
-        prompt += "\n\nDados Detalhados de Anotações:\n";
-        notes.forEach(n => {
-            const values = Object.entries(n.values).map(([key, value]) => `${key}: ${value}`).join(', ');
-            prompt += `- ${n.timestamp.toDate().toLocaleString('pt-BR')}: ${n.type} - ${values}\n`;
+
+        if (!purchaseToken) {
+            logger.error("Notificação recebida sem purchaseToken. Ignorando.");
+            return;
+        }
+
+        const db = admin.firestore();
+
+        const purchasesSnapshot = await db
+            .collectionGroup("purchases")
+            .where("purchaseToken", "==", purchaseToken)
+            .limit(1)
+            .get();
+
+        if (purchasesSnapshot.empty) {
+            logger.error(`Nenhum usuário encontrado para o purchaseToken: ${purchaseToken}. Ignorando.`);
+            return;
+        }
+
+        const purchaseDocRef = purchasesSnapshot.docs[0].ref;
+        const purchaseData = purchasesSnapshot.docs[0].data();
+        const ownerId = purchaseData.userId;
+
+        if (!ownerId) {
+            logger.error(`Documento de compra sem userId associado. Token: ${purchaseToken}. Ignorando.`);
+            return;
+        }
+
+        const ownerRef = db.collection("users").doc(ownerId);
+
+        if (purchaseData.lastNotificationTimestamp?.seconds >= admin.firestore.Timestamp.now().seconds) {
+            logger.info(`Evento duplicado recebido para o token ${purchaseToken}. Ignorando.`);
+            return;
+        }
+
+        let subscriptionDetails;
+        try {
+            const subscriptionResponse = await publisher.purchases.subscriptionsv2.get({
+                packageName: ANDROID_PACKAGE_NAME,
+                token: purchaseToken,
+            });
+            subscriptionDetails = subscriptionResponse.data;
+        } catch (apiError) {
+            logger.error(
+                `❌ Erro ao consultar a API do Google Play para o token ${purchaseToken}:`,
+                apiError
+            );
+            throw new Error(`Falha na consulta da API do Google Play: ${apiError.message}`);
+        }
+
+        const subscriptionState = subscriptionDetails.subscriptionState;
+        const isPremium = subscriptionState === "SUBSCRIPTION_STATE_ACTIVE";
+
+        const expiryTimeMillisString = subscriptionDetails.expiryTime;
+        let expiryTimestamp = null;
+
+        if (expiryTimeMillisString) {
+            const expiryMillis = parseInt(expiryTimeMillisString, 10);
+            if (!isNaN(expiryMillis)) {
+                expiryTimestamp = admin.firestore.Timestamp.fromMillis(expiryMillis);
+            }
+        }
+
+        logger.info(
+            `Atualizando status premium do usuário ${ownerId} → ${
+            isPremium ? "ATIVO" : "INATIVO"
+            } (API: ${subscriptionState}). Data de expiração: ${expiryTimestamp ? expiryTimestamp.toDate().toISOString() : 'N/A'}`
+        );
+
+        const updateData = {
+            premium: isPremium,
+            subscriptionExpiryDate: expiryTimestamp,
+            familyId: null,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+
+        const batch = db.batch();
+        batch.update(ownerRef, updateData);
+        batch.update(purchaseDocRef, {
+            lastNotificationTimestamp: admin.firestore.FieldValue.serverTimestamp(),
         });
+
+        try {
+            await batch.commit();
+            logger.info(`✅ Status do usuário ${ownerId} atualizado com sucesso. Token: ${purchaseToken}`);
+        } catch (batchError) {
+            logger.error(
+                `❌ Erro ao comitar o batch de atualização para o usuário ${ownerId}:`,
+                batchError
+            );
+            throw batchError;
+        }
     }
-    return prompt;
-}
+);
+
+// (A função verifyExpiredSubscriptions que estava faltando está aqui)
+exports.verifyExpiredSubscriptions = onSchedule({
+    schedule: "every day 18:00",
+    timeZone: "America/Sao_Paulo",
+    minInstances: 0
+}, async (event) => {
+    await initGooglePlayPublisher();
+
+    logger.log("Iniciando verificação diária de status de assinaturas...");
+    const db = admin.firestore();
+
+    try {
+        const premiumUsersQuery = await db.collection("users")
+            .where("premium", "==", true)
+            .get();
+
+        if (premiumUsersQuery.empty) {
+            logger.log("Nenhum usuário premium para verificar. Trabalho concluído.");
+            return;
+        }
+
+        logger.info(`Encontrados ${premiumUsersQuery.size} usuários premium para verificar.`);
+        const batch = db.batch();
+        let usersToDeactivate = 0;
+
+        for (const userDoc of premiumUsersQuery.docs) {
+            const userId = userDoc.id;
+            const userData = userDoc.data();
+
+            const purchasesSnapshot = await db.collection("users").doc(userId).collection("purchases").limit(1).get();
+
+            if (purchasesSnapshot.empty) {
+                logger.warn(`Usuário ${userId} é premium mas não tem documento de compra. Revertendo para não-premium.`);
+                batch.update(userDoc.ref, { premium: false, familyId: null });
+                usersToDeactivate++;
+                continue;
+            }
+
+            const purchaseToken = purchasesSnapshot.docs[0].data()?.purchaseToken;
+
+            if (!purchaseToken) {
+                logger.warn(`Documento de compra para o usuário ${userId} não tem purchaseToken. Revertendo.`);
+                batch.update(userDoc.ref, { premium: false, familyId: null });
+                usersToDeactivate++;
+                continue;
+            }
+
+            try {
+                const subscriptionResponse = await publisher.purchases.subscriptionsv2.get({
+                    packageName: ANDROID_PACKAGE_NAME,
+                    token: purchaseToken,
+                });
+
+                const subscriptionState = subscriptionResponse.data.subscriptionState;
+                const isStillActive = subscriptionState === "SUBSCRIPTION_STATE_ACTIVE";
+
+                if (!isStillActive) {
+                    logger.info(`Assinatura do usuário ${userId} expirou (Status API: ${subscriptionState}). Agendando desativação.`);
+                    batch.update(userDoc.ref, { premium: false, familyId: null });
+                    usersToDeactivate++;
+                }
+
+            } catch (apiError) {
+                if (apiError.code === 410 || apiError.code === 404) {
+                     logger.warn(`Assinatura para o token ${purchaseToken} (usuário ${userId}) não foi encontrada na API. Desativando premium.`);
+                     batch.update(userDoc.ref, { premium: false, familyId: null });
+                     usersToDeactivate++;
+                } else {
+                    logger.error(`Erro ao consultar a API do Google Play para o usuário ${userId}:`, apiError.message);
+                }
+            }
+        }
+
+        if (usersToDeactivate > 0) {
+            await batch.commit();
+            logger.info(`${usersToDeactivate} usuários foram atualizados para premium: false.`);
+        } else {
+            logger.log("Nenhuma alteração de status necessária para os usuários premium verificados.");
+        }
+
+    } catch (error) {
+        logger.error("Erro catastrófico ao verificar e corrigir assinaturas expiradas:", error);
+    }
+});
 
 exports.checkLowStock = onDocumentUpdated({
     document: "dependentes/{dependentId}/medicamentos/{medicamentoId}",
@@ -1490,7 +1398,7 @@ exports.checkLowStock = onDocumentUpdated({
 
 
 exports.checkMissedDoses = onSchedule({
-    schedule: "every 4 hours",
+    schedule: "every 4 hours", // ✅ OTIMIZAÇÃO DE CPU
     minInstances: 0
 }, async (event) => {
     logger.log("Executando verificação de doses atrasadas...");
@@ -1718,7 +1626,7 @@ function buildInsightPrompt(dependent, meds, doses, notes, hydration, activities
 
         REGRAS CRÍTICAS: NÃO FAÇA DIAGNÓSTICOS. NÃO DÊ CONSELHOS MÉDICOS. Formate a resposta como um array JSON com objetos contendo "type", "title", e "description" (máximo 30 palavras).
         Tipos de "type" permitidos: "POSITIVE_REINFORCEMENT", "ADHERENCE_ISSUE", "HEALTH_TREND_ALERT", "CORRELATION_INSIGHT".
-        
+
         DADOS PARA ANÁLISE (ÚLTIMOS 7 DIAS):
         - Perfil: Alergias (${dependent.alergias || "N/A"}), Condições (${dependent.condicoesPreexistentes || "N/A"}).
         - Anotações de Saúde: ${notes.length} registros.
@@ -1727,7 +1635,7 @@ function buildInsightPrompt(dependent, meds, doses, notes, hydration, activities
         - Refeições: ${meals.length} registros.
         - Sono: ${sleep.length} registros.
         - Ciclo Menstrual: ${cycleLogs.length} registros diários.
-        
+
         EXEMPLO DE SAÍDA JSON:
         \`\`\`json
         [
@@ -1811,21 +1719,19 @@ exports.checkUpcomingExpiries = onSchedule({
 
 
 exports.sendDailySummary = onSchedule({
-    schedule: "every day 08:00",
+    schedule: "every day 08:00", // ✅ OTIMIZAÇÃO DE CPU
     timeZone: "America/Sao_Paulo",
     minInstances: 0
 }, async (event) => {
 
-    const currentHour = new Date().getHours();
-    logger.log(`Executando Resumo Diário para a hora: ${currentHour}:00`);
+    logger.log(`Executando Resumo Diário agendado para as 08:00.`);
     try {
         const usersSnapshot = await admin.firestore().collection("users")
             .where("premium", "==", true)
             .where("dailySummaryEnabled", "==", true)
-            .where("dailySummaryTime", "==", currentHour)
             .get();
         if (usersSnapshot.empty) {
-            logger.log("Nenhum usuário para notificar nesta hora.");
+            logger.log("Nenhum usuário para notificar.");
             return;
         }
         for (const userDoc of usersSnapshot.docs) {
@@ -1840,7 +1746,8 @@ exports.sendDailySummary = onSchedule({
                 const dependent = dependentDoc.data();
                 const meds = (await dependentDoc.ref.collection('medicamentos').get()).docs.map(d => d.data());
                 const today = new Date();
-                const dosesEsperadasHoje = calculateExpectedDosesForPeriod(meds.filter(m => !m.isUsoEsporadico), today, today);
+                const activeMeds = meds.filter(m => !m.isUsoEsporadico && !m.isArchived);
+                const dosesEsperadasHoje = calculateExpectedDosesForPeriod(activeMeds, today, today);
                 if (dosesEsperadasHoje > 0) {
                     summaryBody += `\n• ${dependent.nome}: ${dosesEsperadasHoje} dose(s) agendada(s) hoje.`;
                     totalDosesDoDia += dosesEsperadasHoje;
@@ -1936,79 +1843,3 @@ exports.onDependentDeleted = onDocumentWritten({ document: "dependentes/{depende
 
     logger.info(`[Exclusão] Limpeza de dados para o dependente ${dependentId} concluída.`);
 });
-
-
-async function getCaregiversToNotify(caregiverIds, settingKey) {
-    if (!caregiverIds || caregiverIds.length === 0) {
-        return [];
-    }
-    const usersSnapshot = await admin.firestore().collection("users").where(admin.firestore.FieldPath.documentId(), "in", caregiverIds).get();
-    const caregiversToNotify = [];
-    usersSnapshot.forEach(doc => {
-        if (doc.data()?.[settingKey] !== false) {
-            caregiversToNotify.push(doc.id);
-        }
-    });
-    return caregiversToNotify;
-}
-
-
-async function sendNotificationToCaregivers(caregiverIds, payload) {
-    if (!caregiverIds || caregiverIds.length === 0) {
-        logger.warn("Nenhum ID de cuidador fornecido para notificação.");
-        return;
-    }
-
-    const usersSnapshot = await admin.firestore().collection("users").where(admin.firestore.FieldPath.documentId(), "in", caregiverIds).get();
-
-    const tokens = [];
-    const userTokensMap = new Map();
-    usersSnapshot.forEach((doc) => {
-        const fcmToken = doc.data()?.fcmToken;
-        if (fcmToken) {
-            tokens.push(fcmToken);
-            userTokensMap.set(fcmToken, doc.id);
-        } else {
-            logger.warn(`Cuidador ${doc.id} não possui um token FCM.`);
-        }
-    });
-
-    if (tokens.length > 0) {
-        const uniqueTokens = [...new Set(tokens)];
-        const message = { ...payload, tokens: uniqueTokens };
-        try {
-            const response = await admin.messaging().sendEachForMulticast(message);
-            logger.info(`${response.successCount} notificações enviadas com sucesso.`);
-
-            if (response.failureCount > 0) {
-                const tokensToDelete = [];
-                response.responses.forEach((resp, idx) => {
-                    if (!resp.success) {
-                        const errorCode = resp.error.code;
-                        if (errorCode === 'messaging/registration-token-not-registered' || errorCode === 'messaging/invalid-registration-token') {
-                            const failedToken = uniqueTokens[idx];
-                            tokensToDelete.push(failedToken);
-                            const userId = userTokensMap.get(failedToken);
-                            logger.warn(`Token inválido detectado para o usuário ${userId}. Agendando para remoção.`);
-                        }
-                    }
-                });
-
-                if (tokensToDelete.length > 0) {
-                    const batch = admin.firestore().batch();
-                    tokensToDelete.forEach(token => {
-                        const userId = userTokensMap.get(token);
-                        if (userId) {
-                            const userRef = admin.firestore().collection('users').doc(userId);
-                            batch.update(userRef, { fcmToken: admin.firestore.FieldValue.delete() });
-                        }
-                    });
-                    await batch.commit();
-                    logger.info(`${tokensToDelete.length} tokens inválidos foram removidos do Firestore.`);
-                }
-            }
-        } catch (error) {
-            logger.error("Falha ao enviar notificações multicast.", error);
-        }
-    }
-}

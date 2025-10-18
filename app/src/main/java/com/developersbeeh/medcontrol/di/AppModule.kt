@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/di/AppModule.kt
 package com.developersbeeh.medcontrol.di
 
 import android.content.Context
@@ -32,15 +31,18 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
+    // 🔐 Firebase Authentication
     @Provides
     @Singleton
     fun provideFirebaseAuth(): FirebaseAuth = FirebaseAuth.getInstance()
 
+    // 📍 Localização (GPS)
     @Provides
     @Singleton
     fun provideFusedLocationProviderClient(@ApplicationContext context: Context) =
         LocationServices.getFusedLocationProviderClient(context)
 
+    // 🌐 Retrofit - Google Places API
     @Provides
     @Singleton
     fun provideRetrofit(): Retrofit {
@@ -65,6 +67,7 @@ object AppModule {
         return PlacesRepository(apiService, context)
     }
 
+    // 🔥 Firestore com persistência local habilitada
     @Provides
     @Singleton
     fun provideFirebaseFirestore(): FirebaseFirestore {
@@ -80,22 +83,28 @@ object AppModule {
         return db
     }
 
+    // ⚙️ Firebase Functions - Região correta confirmada (us-central1)
     @Provides
     @Singleton
     fun provideFirebaseFunctions(): FirebaseFunctions {
-        return Firebase.functions("us-central1")
+        val functions = Firebase.functions("us-central1")
+        Log.d("AppModule", "Firebase Functions configurado para região: ")
+        return functions
     }
 
+    // ☁️ Firebase Storage
     @Provides
     @Singleton
     fun provideFirebaseStorage(): FirebaseStorage = FirebaseStorage.getInstance()
 
+    // ⚙️ User Preferences (DataStore)
     @Provides
     @Singleton
     fun provideUserPreferences(@ApplicationContext context: Context): UserPreferences {
         return UserPreferences(context)
     }
 
+    // 👤 Repositório de Usuário
     @Provides
     @Singleton
     fun provideUserRepository(
@@ -108,6 +117,7 @@ object AppModule {
         return UserRepository(auth, db, storage, functions, userPreferences)
     }
 
+    // 🧩 Moshi JSON Parser
     @Provides
     @Singleton
     fun provideMoshi(): Moshi {
@@ -116,6 +126,7 @@ object AppModule {
             .build()
     }
 
+    // 🍽️ Análise de Refeição (IA)
     @Provides
     @Singleton
     fun provideMealAnalysisRepository(
@@ -123,24 +134,27 @@ object AppModule {
         auth: FirebaseAuth,
         storage: FirebaseStorage,
         firestoreRepository: FirestoreRepository,
-        moshi: Moshi
+        moshi: Moshi,
+        @ApplicationContext context: Context
     ): MealAnalysisRepository {
-        return MealAnalysisRepository(functions, auth, storage, firestoreRepository, moshi)
+        return MealAnalysisRepository(functions, auth, storage, firestoreRepository, moshi, context)
     }
 
+    // 💬 Chat com IA / Assistente
     @Provides
     @Singleton
     fun provideChatRepository(db: FirebaseFirestore, functions: FirebaseFunctions): ChatRepository {
         return ChatRepository(db, functions)
     }
 
+    // ⏰ Lembretes
     @Provides
     @Singleton
     fun provideReminderRepository(db: FirebaseFirestore): ReminderRepository {
         return ReminderRepository(db)
     }
 
-    // ✅ CORREÇÃO APLICADA AQUI
+    // 💊 Medicamentos
     @Provides
     @Singleton
     fun provideMedicationRepository(
@@ -152,6 +166,7 @@ object AppModule {
         return MedicationRepository(db, auth, achievementRepository, context)
     }
 
+    // 🔥 Firestore Repository (Funções, Storage e Auth)
     @Provides
     @Singleton
     fun provideFirestoreRepository(
@@ -162,60 +177,70 @@ object AppModule {
         return FirestoreRepository(auth, storage, functions)
     }
 
+    // 📄 Documentos
     @Provides
     @Singleton
     fun provideDocumentRepository(db: FirebaseFirestore, storage: FirebaseStorage): DocumentRepository {
         return DocumentRepository(db, storage)
     }
 
+    // 🔐 Permissões
     @Provides
     @Singleton
     fun providePermissionRepository(db: FirebaseFirestore): PermissionRepository {
         return PermissionRepository(db)
     }
 
+    // 🕒 Agenda / Ciclos
     @Provides
     @Singleton
     fun provideScheduleRepository(db: FirebaseFirestore): ScheduleRepository {
         return ScheduleRepository(db)
     }
 
+    // 🔄 Realtime Database
     @Provides
     @Singleton
     fun provideRealtimeDatabaseRepository(): RealtimeDatabaseRepository {
         return RealtimeDatabaseRepository()
     }
 
+    // 🔁 Ciclos
     @Provides
     @Singleton
     fun provideCycleRepository(db: FirebaseFirestore): CycleRepository {
         return CycleRepository(db)
     }
 
+    // 🏆 Conquistas
     @Provides
     @Singleton
     fun provideAchievementRepository(db: FirebaseFirestore): AchievementRepository {
         return AchievementRepository(db)
     }
 
+    // 📚 Educação / Conteúdo informativo
     @Provides
     @Singleton
     fun provideEducationRepository(): EducationRepository {
         return EducationRepository()
     }
 
+    // 💉 Vacinas
     @Provides
     @Singleton
     fun provideVaccineRepository(db: FirebaseFirestore): VaccineRepository {
         return VaccineRepository(db)
     }
 
+    // 💬 Mensagens motivacionais
     @Provides
     @Singleton
     fun provideMotivationalMessageRepository(): MotivationalMessageRepository {
         return MotivationalMessageRepository()
     }
 
+    // 💳 Billing / Assinaturas
     @Provides
     @Singleton
     fun provideBillingClientWrapper(
@@ -226,6 +251,7 @@ object AppModule {
         return BillingClientWrapper(context, userRepository, userPreferences)
     }
 
+    // 📊 Log de Atividades
     @Provides
     @Singleton
     fun provideActivityLogRepository(
@@ -236,6 +262,7 @@ object AppModule {
         return ActivityLogRepository(db, auth, userPreferences)
     }
 
+    // 🧠 Análise de Imagens (IA)
     @Provides
     @Singleton
     fun provideImageAnalysisRepository(
@@ -243,17 +270,20 @@ object AppModule {
         auth: FirebaseAuth,
         storage: FirebaseStorage,
         firestoreRepository: FirestoreRepository,
-        medicationRepository: MedicationRepository
+        medicationRepository: MedicationRepository,
+        @ApplicationContext context: Context
     ): ImageAnalysisRepository {
-        return ImageAnalysisRepository(functions, auth, storage, firestoreRepository, medicationRepository)
+        return ImageAnalysisRepository(functions, auth, storage, firestoreRepository, medicationRepository, context)
     }
 
+    // 🧾 PDF Generator (Relatórios)
     @Provides
     @Singleton
     fun providePdfReportGenerator(@ApplicationContext context: Context): PdfReportGenerator {
         return PdfReportGenerator(context)
     }
 
+    // 📄 PDF Generator (Análises)
     @Provides
     @Singleton
     fun provideAnalysisPdfGenerator(@ApplicationContext context: Context): AnalysisPdfGenerator {

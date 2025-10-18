@@ -1,10 +1,12 @@
 package com.developersbeeh.medcontrol.ui.scan
 
+import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.developersbeeh.medcontrol.R
 import com.developersbeeh.medcontrol.data.model.EstoqueLote
 import com.developersbeeh.medcontrol.data.model.Medicamento
 import com.developersbeeh.medcontrol.data.repository.MedicationRepository
@@ -41,7 +43,8 @@ data class ExtractedMedicationData(
 @HiltViewModel
 class ScanAndConfirmViewModel @Inject constructor(
     private val storageRepository: StorageRepository,
-    private val medicationRepository: MedicationRepository
+    private val medicationRepository: MedicationRepository,
+    private val application: Application // Injetado
 ) : ViewModel() {
 
     private val _scanState = MutableLiveData<ScanState>(ScanState.Idle)
@@ -80,10 +83,10 @@ class ScanAndConfirmViewModel @Inject constructor(
                     } else {
                         e.message
                     }
-                    _scanState.value = ScanState.Error(errorMessage ?: "Erro desconhecido")
+                    _scanState.value = ScanState.Error(errorMessage ?: application.getString(R.string.error_unknown))
                 }
             }.onFailure {
-                _scanState.value = ScanState.Error(it.message ?: "Falha no upload da imagem")
+                _scanState.value = ScanState.Error(it.message ?: application.getString(R.string.error_uploading_image))
             }
         }
     }
@@ -116,7 +119,6 @@ class ScanAndConfirmViewModel @Inject constructor(
                 classeTerapeutica = classeTerapeutica,
                 anotacoes = anotacoes,
                 dosagem = "",
-                // ✅ CORREÇÃO: Define a data de criação no momento do salvamento
                 dataCriacao = LocalDateTime.now().toString()
             )
 

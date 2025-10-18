@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/scan/PrescriptionScannerFragment.kt
 package com.developersbeeh.medcontrol.ui.scan
 
 import android.Manifest
@@ -38,14 +37,14 @@ class PrescriptionScannerFragment : Fragment() {
         if (success) {
             analyzeImage(currentPhotoUri)
         } else {
-            Toast.makeText(requireContext(), "Captura de imagem cancelada.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), getString(R.string.image_capture_cancelled), Toast.LENGTH_SHORT).show()
         }
     }
 
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
             analyzeImage(it)
-        } ?: Toast.makeText(requireContext(), "Nenhuma imagem selecionada.", Toast.LENGTH_SHORT).show()
+        } ?: Toast.makeText(requireContext(), getString(R.string.no_image_selected), Toast.LENGTH_SHORT).show()
     }
 
     private val requestCameraPermissionLauncher =
@@ -53,7 +52,7 @@ class PrescriptionScannerFragment : Fragment() {
             if (isGranted) {
                 dispatchTakePictureIntent()
             } else {
-                Toast.makeText(requireContext(), "Permissão de câmera negada.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), getString(R.string.camera_permission_denied), Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -87,9 +86,9 @@ class PrescriptionScannerFragment : Fragment() {
                 val activity = activity ?: return@doOnPreDraw
                 TapTargetSequence(activity)
                     .targets(
-                        TapTarget.forView(binding.buttonFromCamera, "Tirar uma foto", "Use a câmera para tirar uma foto nítida e bem iluminada da sua receita médica.")
+                        TapTarget.forView(binding.buttonFromCamera, getString(R.string.guide_scanner_camera_title), getString(R.string.guide_scanner_camera_subtitle))
                             .style(),
-                        TapTarget.forView(binding.buttonFromGallery, "Escolher da Galeria", "Ou, se preferir, escolha uma imagem da sua galeria de fotos.")
+                        TapTarget.forView(binding.buttonFromGallery, getString(R.string.guide_scanner_gallery_title), getString(R.string.guide_scanner_gallery_subtitle))
                             .style()
                     )
                     .listener(object : TapTargetSequence.Listener {
@@ -122,7 +121,7 @@ class PrescriptionScannerFragment : Fragment() {
         val photoFile: File? = try {
             createImageFile()
         } catch (ex: IOException) {
-            Toast.makeText(requireContext(), "Erro ao criar arquivo de imagem.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), getString(R.string.error_creating_image_file), Toast.LENGTH_SHORT).show()
             null
         }
         photoFile?.also {

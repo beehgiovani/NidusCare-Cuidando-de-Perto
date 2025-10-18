@@ -38,7 +38,6 @@ class ScanAndConfirmFragment : Fragment() {
     private val args: ScanAndConfirmFragmentArgs by navArgs()
     private var currentPhotoUri: Uri? = null
 
-    // ✅ CORREÇÃO: Formato de data padronizado para Mês/Ano
     private val expirationDateFormatter = DateTimeFormatter.ofPattern("MM/yyyy")
 
     private val takePicture = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
@@ -95,10 +94,10 @@ class ScanAndConfirmFragment : Fragment() {
         viewModel.saveStatus.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let { success ->
                 if (success) {
-                    Toast.makeText(context, "Medicamento salvo na farmacinha!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, getString(R.string.medication_saved_to_farmacinha), Toast.LENGTH_SHORT).show()
                     findNavController().popBackStack()
                 } else {
-                    Toast.makeText(context, "Erro ao salvar medicamento.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, getString(R.string.error_saving_medication), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -124,7 +123,7 @@ class ScanAndConfirmFragment : Fragment() {
                 isValid = false
             }
             if (estoque == null || estoque <= 0) {
-                binding.tilEstoque.error = "Quantidade inválida"
+                binding.tilEstoque.error = getString(R.string.invalid_quantity)
                 isValid = false
             }
             if (validadeStr.isBlank()) {
@@ -134,7 +133,6 @@ class ScanAndConfirmFragment : Fragment() {
             if (!isValid) return@setOnClickListener
 
             try {
-                // ✅ CORREÇÃO: Parsing da data para Mês/Ano e cálculo do último dia do mês
                 val validade = YearMonth.parse(validadeStr, expirationDateFormatter).atEndOfMonth()
                 viewModel.saveScannedMedication(
                     dependentId = args.dependentId,
@@ -147,7 +145,7 @@ class ScanAndConfirmFragment : Fragment() {
                     anotacoes = binding.editTextAnotacoes.text.toString().trim()
                 )
             } catch (e: DateTimeParseException) {
-                binding.tilValidade.error = "Formato inválido. Use MM/AAAA"
+                binding.tilValidade.error = getString(R.string.error_invalid_date_format_mm_yyyy)
             }
         }
     }
@@ -170,7 +168,6 @@ class ScanAndConfirmFragment : Fragment() {
 
         datePicker.addOnPositiveButtonClickListener { selection ->
             val date = Instant.ofEpochMilli(selection).atZone(ZoneOffset.UTC).toLocalDate()
-            // ✅ CORREÇÃO: Formata a data para Mês/Ano
             binding.editTextValidade.setText(date.format(expirationDateFormatter))
         }
         datePicker.show(childFragmentManager, "EXPIRATION_DATE_PICKER")

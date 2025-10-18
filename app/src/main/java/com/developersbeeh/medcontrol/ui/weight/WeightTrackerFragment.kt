@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/weight/WeightTrackerFragment.kt
 package com.developersbeeh.medcontrol.ui.weight
 
 import android.os.Bundle
@@ -61,7 +60,7 @@ class WeightTrackerFragment : Fragment() {
             when (state) {
                 is UiState.Success -> {
                     if (state.data.history.isEmpty()) {
-                        binding.emptyState.textViewErrorMessage.text = "Nenhum registro de peso encontrado."
+                        binding.emptyState.textViewErrorMessage.text = getString(R.string.empty_state_no_weight_records)
                     } else {
                         setupChart(state.data.history, state.data.dependent.pesoMeta)
                         adapter.submitList(state.data.history.reversed())
@@ -91,7 +90,7 @@ class WeightTrackerFragment : Fragment() {
 
         if(entries.isEmpty()) return
 
-        val dataSet = LineDataSet(entries, "Evolução do Peso").apply {
+        val dataSet = LineDataSet(entries, getString(R.string.chart_label_weight_evolution)).apply {
             color = ContextCompat.getColor(requireContext(), R.color.md_theme_primary)
             valueTextColor = ContextCompat.getColor(requireContext(), R.color.md_theme_onSurface)
             setCircleColor(ContextCompat.getColor(requireContext(), R.color.md_theme_primary))
@@ -130,7 +129,7 @@ class WeightTrackerFragment : Fragment() {
                 removeAllLimitLines()
                 val goal = goalStr.replace(',', '.').toFloatOrNull()
                 if (goal != null && goal > 0) {
-                    val goalLine = LimitLine(goal, "Meta").apply {
+                    val goalLine = LimitLine(goal, getString(R.string.chart_label_goal)).apply {
                         lineWidth = 2f
                         lineColor = ContextCompat.getColor(context, R.color.md_theme_tertiary)
                         textColor = ContextCompat.getColor(context, R.color.md_theme_tertiary)

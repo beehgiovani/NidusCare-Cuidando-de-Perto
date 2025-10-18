@@ -271,4 +271,95 @@
     <string name="share_dose_type_manual">Manual</string>
     <string name="share_dose_type_calculated">Calculada</string>
 
+
+    <string name="title_daily_summary">Resumo do Dia</string>
+    <string name="title_pending_invites">Convites Pendentes</string>
+
+    <string name="error_loading_dependents">Não foi possível carregar os dependentes.</string>
+    <string name="goal_achieved">Meta atingida!</string>
+    <string name="goal_to_go">Faltam %.1f kg</string>
+    <string name="invite_accepted_success">Convite aceito! O novo dependente aparecerá na sua lista.</string>
+    <string name="invite_accepted_error">Erro ao aceitar convite: %1$s</string>
+    <string name="invite_declined_success">Convite recusado.</string>
+    <string name="invite_declined_error">Erro ao recusar o convite.</string>
+    <string name="error_cannot_delete_self_profile">Não é possível excluir seu próprio perfil de autocuidado.</string>
+
+    <string name="dependent_deleted_error">Erro ao excluir %1$s.</string>
+
+    <string name="summary_doses_today">Doses hoje: %1$d de %2$d tomadas</string>
+    <string name="summary_no_future_doses">Nenhuma dose futura</string>
+    <string name="summary_appointments_today_single">%1$d compromisso na agenda hoje.</string>
+    <string name="summary_appointments_today_plural">%1$d compromissos na agenda hoje.</string>
+    <string name="summary_doses_late_single">%1$d dose está atrasada</string>
+    <string name="summary_doses_late_plural">%1$d doses estão atrasadas</string>
+
+    <string name="format_age_years">%d anos</string>
+    <string name="label_today_progress">Hoje: %1$d de %2$d doses</string>
+    <string name="label_adherence_7d">Adesão (7d)</string>
+    <string name="label_next_dose">Próxima Dose</string>
+    <string name="label_appointments_today">CONSULTAS HOJE</string>
+    <string name="label_low_stock">ESTOQUE BAIXO</string>
+    <string name="label_new_insights">NOVOS INSIGHTS</string>
+    <string name="label_view">VER</string>
+    <string name="format_percentage">%d%%</string>
+       <string name="error_user_not_authenticated_relogin">Usuário não autenticado. Faça login novamente.</string>
+        <string name="none_informed">Nenhuma informada</string>
+        <string name="name_not_found">Nome não encontrado</string>
+        <string name="dosage_not_found">Dosagem não encontrada</string>
+        <string name="analysis_warnings">Avisos da Análise:\n- %1$s</string>
+        <string name="error_unknown_prescription_analysis">Erro desconhecido ao analisar a receita.</string>
+        <string name="error_failed_prescription_analysis">Falha ao analisar a receita: %1$s</string>
+        <string name="error_user_not_authenticated">Usuário não autenticado.</string>
+        <string name="error_cannot_process_ai_response">Não foi possível processar a resposta da IA.</string>
+        <string name="error_failed_meal_analysis">Falha ao analisar a refeição: %1$s</string>
+        <string name="error_uploading_image_to_storage">Falha no upload da imagem para o Storage</string>
+        <string name="error_unknown">Erro desconhecido</string>
+        <string name="error_uploading_image">Falha no upload da imagem</string>
+
+        <string name="title_prescription_analysis">Análise da Receita</string>
+        <string name="image_capture_cancelled">Captura de imagem cancelada.</string>
+        <string name="no_image_selected">Nenhuma imagem selecionada.</string>
+        <string name="camera_permission_denied">Permissão de câmera negada.</string>
+        <string name="error_creating_image_file">Erro ao criar arquivo de imagem.</string>
+        <string name="guide_scanner_camera_title">Tirar uma foto</string>
+        <string name="guide_scanner_camera_subtitle">Use a câmera para tirar uma foto nítida e bem iluminada da sua receita médica.</string>
+        <string name="guide_scanner_gallery_title">Escolher da Galeria</string>
+        <string name="guide_scanner_gallery_subtitle">Ou, se preferir, escolha uma imagem da sua galeria de fotos.</string>
+
+        <string name="analyzing_prescription">Analisando receita...</string>
+        <string name="saving_medications">Salvando medicamentos...</string>
+        <string name="all_medications_saved_success">Todos os medicamentos foram salvos!</string>
+        <string name="all_medications_saved_fail">Falha ao salvar um ou mais medicamentos.</string>
+        <string name="question_first_dose_time">Qual o horário da 1ª dose de %1$s?</string>
+        <string name="dosage_not_identified">Dosagem: Não identificada</string>
+        <string name="posology_ok">Posologia: OK</string>
+        <string name="posology_pending">Posologia: Pendente</string>
+
+        <string name="medication_saved_to_farmacinha">Medicamento salvo na farmacinha!</string>
+
+        <string name="error_invalid_date_format_mm_yyyy">Formato inválido. Use MM/AAAA</string>
+
+
+        <string name="empty_state_no_weight_records">Nenhum registro de peso encontrado.</string>
+        <string name="chart_label_weight_evolution">Evolução do Peso</string>
+        <string name="chart_label_goal">Meta</string>
+        <string name="weight_value_kg">%.1f kg</string>
+        <string name="weight_gain_kg">+%.1f kg</string>
+        <string name="weight_loss_kg">%.1f kg</string>
+        <string name="weight_stable_kg">0.0 kg</string>
+        <string name="error_dependent_not_found">Dependente não encontrado.</string>
+
+        <string name="empty_state_no_meal_records">Nenhum registro de refeição encontrado.</string>
+        <string name="chart_label_calories_kcal">Calorias (kcal)</string>
+        <string name="date_today">Hoje</string>
+        <string name="date_yesterday">Ontem</string>
+        <string name="meal_type_default">Refeição</string>
+        <string name="value_kcal">%skcal</string>
+
+    <string name="meal_type_breakfast">Café da Manhã</string>
+    <string name="meal_type_lunch">Almoço</string>
+    <string name="meal_type_dinner">Jantar</string>
+    <string name="meal_type_snack">Lanche</string>
+
+
 </resources>

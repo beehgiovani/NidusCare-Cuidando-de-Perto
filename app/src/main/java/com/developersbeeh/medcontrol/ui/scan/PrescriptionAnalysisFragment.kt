@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/scan/PrescriptionAnalysisFragment.kt
 package com.developersbeeh.medcontrol.ui.scan
 
 import android.app.TimePickerDialog
@@ -39,7 +38,7 @@ class PrescriptionAnalysisFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        (activity as? AppCompatActivity)?.supportActionBar?.title = "Análise da Receita"
+        (activity as? AppCompatActivity)?.supportActionBar?.title = getString(R.string.title_prescription_analysis)
         viewModel.initialize(args.dependentId, args.imageUri, args.dependentName)
         setupRecyclerView()
         observeViewModel()
@@ -82,7 +81,7 @@ class PrescriptionAnalysisFragment : Fragment() {
         }
 
         viewModel.uiState.observe(viewLifecycleOwner) { state ->
-            binding.loadingLayout.visibility = View.GONE // Sempre esconde o layout antigo
+            binding.loadingLayout.visibility = View.GONE
             binding.contentLayout.visibility = if (state is PrescriptionAnalysisUiState.Success) View.VISIBLE else View.GONE
             binding.errorLayout.root.visibility = if (state is PrescriptionAnalysisUiState.Error) View.VISIBLE else View.GONE
 
@@ -99,7 +98,7 @@ class PrescriptionAnalysisFragment : Fragment() {
 
         viewModel.saveStatus.observe(viewLifecycleOwner) { event ->
             event.getContentIfNotHandled()?.let { success ->
-                val message = if (success) "Todos os medicamentos foram salvos!" else "Falha ao salvar um ou mais medicamentos."
+                val message = if (success) getString(R.string.all_medications_saved_success) else getString(R.string.all_medications_saved_fail)
                 Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
                 if (success) {
                     findNavController().popBackStack(R.id.listMedicamentosFragment, false)
@@ -126,7 +125,7 @@ class PrescriptionAnalysisFragment : Fragment() {
             calendar.get(Calendar.MINUTE),
             true
         )
-        timePicker.setTitle("Qual o horário da 1ª dose de ${medicamento.nome}?")
+        timePicker.setTitle(getString(R.string.question_first_dose_time, medicamento.nome))
         timePicker.setCancelable(false)
         timePicker.show()
     }

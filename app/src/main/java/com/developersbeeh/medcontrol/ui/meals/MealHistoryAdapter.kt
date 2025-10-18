@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/meals/MealHistoryAdapter.kt
 package com.developersbeeh.medcontrol.ui.meals
 
 import android.view.LayoutInflater
@@ -6,6 +5,7 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.developersbeeh.medcontrol.R
 import com.developersbeeh.medcontrol.data.model.Refeicao
 import com.developersbeeh.medcontrol.data.model.TipoRefeicao
 import com.developersbeeh.medcontrol.databinding.ItemMealBinding
@@ -46,24 +46,26 @@ class MealHistoryAdapter : ListAdapter<MealListItem, RecyclerView.ViewHolder>(Di
 
     class HeaderViewHolder(private val binding: ItemTimelineDateHeaderBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(header: MealListItem.Header) {
+            val context = binding.root.context
             binding.textViewDate.text = when {
-                header.date.isEqual(LocalDate.now()) -> "Hoje"
-                header.date.isEqual(LocalDate.now().minusDays(1)) -> "Ontem"
-                else -> header.date.toString() // Pode formatar como desejar
+                header.date.isEqual(LocalDate.now()) -> context.getString(R.string.date_today)
+                header.date.isEqual(LocalDate.now().minusDays(1)) -> context.getString(R.string.date_yesterday)
+                else -> header.date.toString()
             }
         }
     }
 
     class MealViewHolder(private val binding: ItemMealBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(mealItem: MealListItem.Meal) {
+            val context = binding.root.context
             val meal = mealItem.refeicao
             binding.textViewDescription.text = meal.descricao
             binding.textViewMealType.text = try {
                 TipoRefeicao.valueOf(meal.tipo).displayName
             } catch (e: Exception) {
-                "Refeição"
+                context.getString(R.string.meal_type_default)
             }
-            binding.textViewCalories.text = meal.calorias?.let { "${it}kcal" } ?: ""
+            binding.textViewCalories.text = meal.calorias?.let { context.getString(R.string.value_kcal, it) } ?: ""
         }
     }
 

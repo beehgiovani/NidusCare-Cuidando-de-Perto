@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/niduscare/ui/scan/ScannedMedicationAdapter.kt
 package com.developersbeeh.medcontrol.ui.scan
 
 import android.view.LayoutInflater
@@ -30,15 +29,15 @@ class ScannedMedicationAdapter(
         RecyclerView.ViewHolder(binding.root) {
 
         fun bind(medicamento: Medicamento) {
+            val context = binding.root.context
             binding.textViewName.text = medicamento.nome
-            binding.textViewDosage.text = medicamento.dosagem.ifBlank { "Dosagem: Não identificada" }
+            binding.textViewDosage.text = medicamento.dosagem.ifBlank { context.getString(R.string.dosage_not_identified) }
 
-            // Verifica se a posologia foi identificada
             val hasPosologia = medicamento.horarios.isNotEmpty() || medicamento.isUsoEsporadico
-            binding.textViewPosologyStatus.text = if (hasPosologia) "Posologia: OK" else "Posologia: Pendente"
+            binding.textViewPosologyStatus.text = if (hasPosologia) context.getString(R.string.posology_ok) else context.getString(R.string.posology_pending)
             binding.textViewPosologyStatus.setTextColor(
-                if (hasPosologia) binding.root.context.getColor(R.color.success_green)
-                else binding.root.context.getColor(R.color.error_red)
+                if (hasPosologia) context.getColor(R.color.success_green)
+                else context.getColor(R.color.error_red)
             )
 
             binding.buttonEdit.setOnClickListener { onEditClick(medicamento) }

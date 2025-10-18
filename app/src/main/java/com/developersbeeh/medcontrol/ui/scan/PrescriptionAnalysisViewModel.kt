@@ -1,12 +1,14 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/scan/PrescriptionAnalysisViewModel.kt
 package com.developersbeeh.medcontrol.ui.scan
 
+import android.app.Application
 import android.net.Uri
 import android.util.Log
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.developersbeeh.medcontrol.R
 import com.developersbeeh.medcontrol.data.model.FrequenciaTipo
 import com.developersbeeh.medcontrol.data.model.Medicamento
 import com.developersbeeh.medcontrol.data.repository.ImageAnalysisRepository
@@ -20,7 +22,6 @@ import javax.inject.Inject
 private const val TAG = "PrescriptionAnalysisVM"
 
 sealed class PrescriptionAnalysisUiState {
-    // O estado de Loading foi removido daqui, pois será controlado pelo diálogo
     data class Success(val medications: List<Medicamento>) : PrescriptionAnalysisUiState()
     data class Error(val message: String) : PrescriptionAnalysisUiState()
 }
@@ -28,7 +29,8 @@ sealed class PrescriptionAnalysisUiState {
 @HiltViewModel
 class PrescriptionAnalysisViewModel @Inject constructor(
     private val imageAnalysisRepository: ImageAnalysisRepository,
-    private val medicationRepository: MedicationRepository
+    private val medicationRepository: MedicationRepository,
+    private val application: Application // Injetado
 ) : ViewModel() {
 
     private val _uiState = MutableLiveData<PrescriptionAnalysisUiState>()
@@ -43,7 +45,6 @@ class PrescriptionAnalysisViewModel @Inject constructor(
     private val _requestStartTimeEvent = MutableLiveData<Event<Medicamento>>()
     val requestStartTimeEvent: LiveData<Event<Medicamento>> = _requestStartTimeEvent
 
-    // ✅ NOVOS EVENTOS PARA CONTROLAR O DIÁLOGO DE CARREGAMENTO
     private val _showLoading = MutableLiveData<Event<String>>()
     val showLoading: LiveData<Event<String>> = _showLoading
 
@@ -63,7 +64,7 @@ class PrescriptionAnalysisViewModel @Inject constructor(
     }
 
     private fun startAnalysis(imageUri: Uri) {
-        _showLoading.value = Event("Analisando receita...")
+        _showLoading.value = Event(application.getString(R.string.analyzing_prescription))
         viewModelScope.launch {
             try {
                 val result = imageAnalysisRepository.analyzePrescription(dependentId, imageUri)
@@ -72,7 +73,7 @@ class PrescriptionAnalysisViewModel @Inject constructor(
                     _medicationsFromAnalysis.addAll(medications)
                     _uiState.postValue(PrescriptionAnalysisUiState.Success(_medicationsFromAnalysis.toList()))
                 }.onFailure { e ->
-                    _uiState.postValue(PrescriptionAnalysisUiState.Error(e.message ?: "Erro desconhecido ao analisar a receita."))
+                    _uiState.postValue(PrescriptionAnalysisUiState.Error(e.message ?: application.getString(R.string.error_unknown_prescription_analysis)))
                     Log.e(TAG, "Erro ao analisar receita", e)
                 }
             } finally {
@@ -87,7 +88,7 @@ class PrescriptionAnalysisViewModel @Inject constructor(
     }
 
     fun saveAllMedications() {
-        _showLoading.value = Event("Salvando medicamentos...")
+        _showLoading.value = Event(application.getString(R.string.saving_medications))
         viewModelScope.launch {
             try {
                 val validMeds = _medicationsFromAnalysis.filter { it.horarios.isNotEmpty() || it.isUsoEsporadico }

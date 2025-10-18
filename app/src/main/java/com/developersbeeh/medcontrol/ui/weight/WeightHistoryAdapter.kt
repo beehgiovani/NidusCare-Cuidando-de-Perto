@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/weight/WeightHistoryAdapter.kt
 package com.developersbeeh.medcontrol.ui.weight
 
 import android.view.LayoutInflater
@@ -43,7 +42,7 @@ class WeightHistoryAdapter : ListAdapter<HealthNote, WeightHistoryAdapter.ViewHo
 
             binding.root.isVisible = true
             binding.textViewDate.text = record.timestamp.toLocalDate().format(dateFormatter)
-            binding.textViewWeight.text = "${currentWeight} kg"
+            binding.textViewWeight.text = context.getString(R.string.weight_value_kg, currentWeight)
 
             val previousWeight = previousRecord?.values?.get("weight")?.replace(',', '.')?.toFloatOrNull()
             if (previousWeight != null) {
@@ -56,19 +55,19 @@ class WeightHistoryAdapter : ListAdapter<HealthNote, WeightHistoryAdapter.ViewHo
                         binding.imageViewTrend.setImageResource(R.drawable.ic_trending_up)
                         binding.imageViewTrend.setColorFilter(ContextCompat.getColor(context, R.color.error_red))
                         binding.textViewDifference.setTextColor(ContextCompat.getColor(context, R.color.error_red))
-                        binding.textViewDifference.text = "+%.1f kg".format(difference)
+                        binding.textViewDifference.text = context.getString(R.string.weight_gain_kg, difference)
                     }
                     difference < -0.1f -> { // Perda de peso
                         binding.imageViewTrend.setImageResource(R.drawable.ic_trending_down)
                         binding.imageViewTrend.setColorFilter(ContextCompat.getColor(context, R.color.success_green))
                         binding.textViewDifference.setTextColor(ContextCompat.getColor(context, R.color.success_green))
-                        binding.textViewDifference.text = "%.1f kg".format(difference)
+                        binding.textViewDifference.text = context.getString(R.string.weight_loss_kg, difference)
                     }
                     else -> { // Manteve
                         binding.imageViewTrend.setImageResource(R.drawable.ic_trending_flat)
                         binding.imageViewTrend.setColorFilter(ContextCompat.getColor(context, R.color.md_theme_onSurfaceVariant))
                         binding.textViewDifference.setTextColor(ContextCompat.getColor(context, R.color.md_theme_onSurfaceVariant))
-                        binding.textViewDifference.text = "0.0 kg"
+                        binding.textViewDifference.text = context.getString(R.string.weight_stable_kg)
                     }
                 }
             } else {

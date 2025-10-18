@@ -61,7 +61,7 @@ class MealTrackerFragment : Fragment() {
             when (state) {
                 is UiState.Success -> {
                     if (state.data.history.isEmpty()) {
-                        binding.emptyState.textViewErrorMessage.text = "Nenhum registro de refeição encontrado."
+                        binding.emptyState.textViewErrorMessage.text = getString(R.string.empty_state_no_meal_records)
                     } else {
                         setupChart(state.data.history, state.data.dependent.metaCaloriasDiarias.toFloat())
                         adapter.submitList(groupMealsByDate(state.data.history))
@@ -78,7 +78,6 @@ class MealTrackerFragment : Fragment() {
 
     private fun groupMealsByDate(records: List<Refeicao>): List<MealListItem> {
         val groupedItems = mutableListOf<MealListItem>()
-        // ✅ CORREÇÃO: Acessando a propriedade 'timestamp' diretamente
         val groupedByDate = records.groupBy { it.timestamp.toLocalDate() }
 
         groupedByDate.keys.sortedDescending().forEach { date ->
@@ -93,7 +92,6 @@ class MealTrackerFragment : Fragment() {
     private fun setupChart(records: List<Refeicao>, goal: Float) {
         val sevenDaysAgo = LocalDate.now().minusDays(6)
         val dailyTotals = records
-            // ✅ CORREÇÃO: Acessando a propriedade 'timestamp' diretamente
             .filter { !it.timestamp.toLocalDate().isBefore(sevenDaysAgo) }
             .groupBy { it.timestamp.toLocalDate() }
             .mapValues { (_, entries) -> entries.sumOf { it.calorias ?: 0 } }
@@ -109,7 +107,7 @@ class MealTrackerFragment : Fragment() {
             xAxisLabels.add(date.format(dayFormatter))
         }
 
-        val dataSet = BarDataSet(entries, "Calorias (kcal)").apply {
+        val dataSet = BarDataSet(entries, getString(R.string.chart_label_calories_kcal)).apply {
             color = ContextCompat.getColor(requireContext(), R.color.md_theme_primary)
             setDrawValues(false)
         }
@@ -139,7 +137,7 @@ class MealTrackerFragment : Fragment() {
                 textColor = ContextCompat.getColor(context, R.color.md_theme_onSurfaceVariant)
                 removeAllLimitLines()
                 if (goal > 0) {
-                    val goalLine = LimitLine(goal, "Meta").apply {
+                    val goalLine = LimitLine(goal, getString(R.string.chart_label_goal)).apply {
                         lineWidth = 2f
                         lineColor = ContextCompat.getColor(context, R.color.md_theme_tertiary)
                         textColor = ContextCompat.getColor(context, R.color.md_theme_tertiary)
