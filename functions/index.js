@@ -596,7 +596,7 @@ exports.gerarResumoConsulta = onCall({ cors: true, memory: "1GiB", timeoutSecond
 });
 
 // ✅ OTIMIZAÇÃO: Memória reduzida para 512MiB
-exports.getChatResponse = onCall({ cors: true, memory: "512MiB", minInstances: 0, enforceAppCheck: true }, async (request) => {
+exports.getChatResponse = onCall({ cors: true, memory: "1024MiB", minInstances: 0, enforceAppCheck: true }, async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Usuário não autenticado.");
     const { prompt, dependentId } = request.data;
     if (!prompt || !dependentId) throw new HttpsError("invalid-argument", "Parâmetros 'prompt' e 'dependentId' são obrigatórios.");
@@ -666,7 +666,7 @@ exports.getChatResponse = onCall({ cors: true, memory: "512MiB", minInstances: 0
 });
 
 // ✅ OTIMIZAÇÃO: Memória reduzida para 512MiB
-exports.sendEmergencyAlert = onCall({ cors: true, minInstances: 0, enforceAppCheck: true, memory: "512MiB" }, async (request) => {
+exports.sendEmergencyAlert = onCall({ cors: true, minInstances: 0, enforceAppCheck: true, memory: "256MiB" }, async (request) => {
     const { dependentId } = request.data;
     if (!dependentId) {
         throw new HttpsError("invalid-argument", "O ID do dependente é obrigatório.");
@@ -858,7 +858,7 @@ exports.notifyCaregiversOfScheduleChange = onCall({ cors: true, minInstances: 0,
 });
 
 // ✅ OTIMIZAÇÃO: Memória reduzida para 512MiB
-exports.acceptInvite = onCall({ cors: true, minInstances: 0, enforceAppCheck: true, memory: "512MiB" }, async (request) => {
+exports.acceptInvite = onCall({ cors: true, minInstances: 0, enforceAppCheck: true, memory: "256MiB" }, async (request) => {
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "A função deve ser chamada por um usuário autenticado.");
     }
@@ -1046,23 +1046,29 @@ function parsePrescriptionAnalysis(rawAnalysis) {
 function buildMealAnalysisPrompt(healthProfile) {
     const age = calculateAgeFromDobString(healthProfile.idade);
     let prompt = `
-        Você é um nutricionista virtual. Analise a imagem desta refeição e retorne APENAS um objeto JSON.
+        Você é um nutricionista virtual e analista de alimentos. Sua tarefa é analisar a imagem de uma refeição e preencher TODOS os campos de um objeto JSON.
 
-        Considere o perfil de saúde:
+        Analise o perfil de saúde do usuário:
         - Idade: ${age || 'N/A'}
         - Peso: ${healthProfile.peso || 'N/A'} kg
         - Altura: ${healthProfile.altura || 'N/A'} cm
         - Sexo: ${healthProfile.sexo || 'N/A'}
 
-        Formato JSON esperado:
+        Agora, analise a imagem da refeição e retorne APENAS um objeto JSON com a seguinte estrutura:
+
         {
-          "descricao": "Uma breve descrição dos alimentos visíveis (ex: 'Prato com arroz, feijão, filé de frango grelhado e salada de alface e tomate.')",
-          "caloriasEstimadas": "Um NÚMERO inteiro estimado de calorias (ex: 550)",
-          "analiseSaude": "Uma análise curta (2-3 frases) sobre o quão saudável esta refeição parece ser, considerando o perfil. Seja encorajador.",
-          "sugestao": "Uma sugestão simples de melhoria ou um elogio (ex: 'Ótima fonte de proteína! Tente adicionar mais vegetais verdes na próxima vez.' ou 'Refeição muito bem balanceada!')"
+          "descricao": "(string) Descreva detalhadamente todos os alimentos visíveis e suas quantidades estimadas. (ex: 'Prato com 100g de arroz integral, 50g de feijão, 120g de filé de frango grelhado e salada de alface e tomate.')",
+          "calorias": (number) Uma estimativa numérica total de calorias para a refeição. (ex: 550)",
+          "beneficios": "(string) Um parágrafo curto (2-3 frases) destacando os principais benefícios nutricionais da refeição (ex: 'Rica em proteínas e fibras, o que ajuda na saciedade e no controle glicêmico...').",
+          "dicas": "(string) Uma 'Dica do Nidus'. Uma sugestão curta, prática e encorajadora de melhoria ou um elogio. (ex: 'Refeição muito bem balanceada! Tente adicionar mais folhas verdes escuras na próxima vez.')",
+          "tipoRefeicao": "(string) Classifique a refeição em UMA das seguintes chaves: 'CAFE_DA_MANHA', 'ALMOCO', 'JANTAR', ou 'LANCHE'."
         }
 
-        REGRAS: Retorne APENAS o JSON. Não inclua \`\`\`json\`\`\`.
+        REGRAS CRÍTICAS:
+        1. A resposta DEVE ser APENAS o objeto JSON, sem nenhum texto, explicação ou \`\`\`json\`\`\` ao redor.
+        2. Todos os campos do JSON são obrigatórios.
+        3. Se a imagem for de baixa qualidade, não contiver comida, ou for impossível de analisar, retorne um JSON com um campo de erro:
+           {"error": "Não foi possível identificar alimentos na imagem. Por favor, tente uma foto mais nítida e com melhor iluminação."}
     `;
     return prompt;
 }
@@ -1840,5 +1846,6 @@ exports.onDependentDeleted = onDocumentWritten({ document: "dependentes/{depende
             logger.error(`[Exclusão] Falha ao limpar a sub-coleção '${result.reason.collection}':`, result.reason);
         }
     });
+
     logger.info(`[Exclusão] Limpeza de dados para o dependente ${dependentId} concluída.`);
 });
