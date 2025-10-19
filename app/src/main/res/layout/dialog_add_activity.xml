@@ -10,16 +10,16 @@
 
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/tilActivityType"
-        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Tipo de Atividade (ex: Caminhada)">
+        android:hint="@string/dialog_hint_activity_type">
 
         <AutoCompleteTextView
             android:id="@+id/autoCompleteActivityType"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="textCapWords" />
+            android:inputType="text" />
     </com.google.android.material.textfield.TextInputLayout>
 
     <com.google.android.material.textfield.TextInputLayout
@@ -28,8 +28,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:hint="Duração"
-        app:suffixText="minutos">
+        android:hint="@string/dialog_hint_activity_duration">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/editTextDuration"
@@ -37,5 +36,4 @@
             android:layout_height="wrap_content"
             android:inputType="number" />
     </com.google.android.material.textfield.TextInputLayout>
-
 </LinearLayout>

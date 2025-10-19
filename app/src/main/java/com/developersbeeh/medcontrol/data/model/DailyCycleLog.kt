@@ -1,44 +1,44 @@
-// src/main/java/com/developersbeeh/medcontrol/data/model/DailyCycleLog.kt
 package com.developersbeeh.medcontrol.data.model
 
 import com.google.firebase.firestore.DocumentId
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-enum class FlowIntensity(val displayName: String) {
-    NONE("Nenhum"),
-    SPOTTING("Gotas"),
-    LIGHT("Leve"),
-    MEDIUM("Médio"),
-    HEAVY("Intenso")
+// ✅ REATORADO: Enums agora são apenas chaves, sem 'displayName'.
+enum class FlowIntensity {
+    NONE,
+    SPOTTING,
+    LIGHT,
+    MEDIUM,
+    HEAVY
 }
 
-enum class Symptom(val displayName: String) {
-    CRAMPS("Cólicas"),
-    HEADACHE("Dor de Cabeça"),
-    BLOATING("Inchaço"),
-    FATIGUE("Fadiga"),
-    MOOD_SWINGS("Alterações de Humor"),
-    ACNE("Acne"),
-    TENDER_BREASTS("Sensibilidade nos Seios"),
-    BACK_PAIN("Dor nas Costas"),
-    NAUSEA("Náusea"),
-    CRAVINGS("Desejos Alimentares")
+enum class Symptom {
+    CRAMPS,
+    HEADACHE,
+    BLOATING,
+    FATIGUE,
+    MOOD_SWINGS,
+    ACNE,
+    TENDER_BREASTS,
+    BACK_PAIN,
+    NAUSEA,
+    CRAVINGS
 }
 
-enum class Mood(val displayName: String) {
-    HAPPY("Feliz"),
-    CALM("Calma"),
-    SAD("Triste"),
-    IRRITABLE("Irritada"),
-    ANXIOUS("Ansiosa")
+enum class Mood {
+    HAPPY,
+    CALM,
+    SAD,
+    IRRITABLE,
+    ANXIOUS
 }
 
-enum class CervicalMucus(val displayName: String) {
-    DRY("Seco"),
-    STICKY("Pegajoso"),
-    CREAMY("Cremoso"),
-    EGG_WHITE("Clara de Ovo")
+enum class CervicalMucus {
+    DRY,
+    STICKY,
+    CREAMY,
+    EGG_WHITE
 }
 
 data class DailyCycleLog(
@@ -47,7 +47,7 @@ data class DailyCycleLog(
 
     val dependentId: String = "",
     val flow: FlowIntensity = FlowIntensity.NONE,
-    val symptoms: List<Symptom> = emptyList(), // ✅ CORRIGIDO: de Set para List
+    val symptoms: List<Symptom> = emptyList(), // Mantido como List
     val mood: Mood? = null,
     val hadSexualActivity: Boolean = false,
     val wasProtected: Boolean? = null,

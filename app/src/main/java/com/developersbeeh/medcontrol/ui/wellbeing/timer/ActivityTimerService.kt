@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/wellbeing/timer/ActivityTimerService.kt
 package com.developersbeeh.medcontrol.ui.wellbeing.timer
 
 import android.app.NotificationChannel
@@ -37,7 +36,7 @@ class ActivityTimerService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var runnable: Runnable? = null
     private var elapsedTime = 0L
-    private var activityType: String = "Atividade Física"
+    private var activityType: String = "" // Será atualizado no onCreate
     private var dependentId: String? = null
 
     companion object {
@@ -48,7 +47,12 @@ class ActivityTimerService : Service() {
         const val EXTRA_DEPENDENT_ID = "EXTRA_DEPENDENT_ID"
         private const val NOTIFICATION_ID = 123
         private const val NOTIFICATION_CHANNEL_ID = "activity_timer_channel"
-        private const val NOTIFICATION_CHANNEL_NAME = "Cronômetro de Atividade"
+        // ✅ CORREÇÃO: Nome do canal movido para strings.xml
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        activityType = getString(R.string.timer_default_activity_type) // Define o padrão usando strings
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -84,13 +88,13 @@ class ActivityTimerService : Service() {
             runnable = null
         }
 
-        // ✅ SALVA A ATIVIDADE DIRETAMENTE DAQUI
         val durationMinutes = TimeUnit.MILLISECONDS.toMinutes(elapsedTime).toInt()
         if (durationMinutes > 0 && dependentId != null) {
             CoroutineScope(Dispatchers.IO).launch {
                 val novoRegistro = AtividadeFisica(tipo = activityType, duracaoMinutos = durationMinutes)
                 firestoreRepository.saveAtividadeFisicaRecord(dependentId!!, novoRegistro)
-                saveLog(dependentId!!, "registrou $durationMinutes minutos de $activityType", TipoAtividade.ANOTACAO_CRIADA)
+                // ✅ REATORADO: Usa strings.xml
+                saveLog(dependentId!!, getString(R.string.log_activity_timer_stopped, durationMinutes, activityType), TipoAtividade.ANOTACAO_CRIADA)
             }
         }
 
@@ -111,10 +115,10 @@ class ActivityTimerService : Service() {
             userRepository.getCurrentUser()?.uid ?: ""
         } else { "dependent_user" }
         val log = Atividade(
-            descricao = "$autorNome $descricao",
+            descricao = descricao,
             tipo = tipo,
             autorId = autorId,
-            autorNome = autorNome
+            autorNome = autorNome // O 'getAuthorName' no backend usará este campo
         )
         firestoreRepository.saveActivityLog(dependentId, log)
     }
@@ -139,7 +143,8 @@ class ActivityTimerService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("$activityType em Andamento")
+            // ✅ REATORADO: Usa strings.xml
+            .setContentTitle(getString(R.string.notification_activity_in_progress, activityType))
             .setSmallIcon(R.drawable.ic_fitness)
             .setContentIntent(pendingIntent)
             .setOnlyAlertOnce(true)
@@ -155,12 +160,12 @@ class ActivityTimerService : Service() {
 
         when (currentState) {
             is TimerState.Running -> {
-                notificationBuilder.addAction(R.drawable.ic_timer_pause, "Pausar", createActionIntent(ACTION_PAUSE))
-                notificationBuilder.addAction(R.drawable.ic_timer_stop, "Parar", createActionIntent(ACTION_STOP))
+                notificationBuilder.addAction(R.drawable.ic_timer_pause, getString(R.string.notification_action_pause), createActionIntent(ACTION_PAUSE))
+                notificationBuilder.addAction(R.drawable.ic_timer_stop, getString(R.string.notification_action_stop), createActionIntent(ACTION_STOP))
             }
             is TimerState.Paused -> {
-                notificationBuilder.addAction(R.drawable.ic_play_arrow, "Continuar", createActionIntent(ACTION_START_RESUME))
-                notificationBuilder.addAction(R.drawable.ic_timer_stop, "Parar", createActionIntent(ACTION_STOP))
+                notificationBuilder.addAction(R.drawable.ic_play_arrow, getString(R.string.notification_action_resume), createActionIntent(ACTION_START_RESUME))
+                notificationBuilder.addAction(R.drawable.ic_timer_stop, getString(R.string.notification_action_stop), createActionIntent(ACTION_STOP))
             }
             else -> {}
         }
@@ -192,7 +197,7 @@ class ActivityTimerService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val serviceChannel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
-                NOTIFICATION_CHANNEL_NAME,
+                getString(R.string.notification_channel_name), // ✅ REATORADO: Usa strings.xml
                 NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(NotificationManager::class.java)

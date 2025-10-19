@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/sleep/SleepHistoryAdapter.kt
 package com.developersbeeh.medcontrol.ui.sleep
 
 import android.content.res.ColorStateList
@@ -32,7 +31,9 @@ class SleepHistoryAdapter : ListAdapter<RegistroSono, SleepHistoryAdapter.ViewHo
     inner class ViewHolder(private val binding: ItemSleepHistoryBinding) :
         RecyclerView.ViewHolder(binding.root) {
 
-        private val dateFormatter = DateTimeFormatter.ofPattern("dd MMM", Locale("pt", "BR"))
+        // ✅ REATORADO: Usa strings.xml para o locale e formato
+        private val locale = Locale(binding.root.context.getString(R.string.locale_pt), binding.root.context.getString(R.string.locale_br))
+        private val dateFormatter = DateTimeFormatter.ofPattern(binding.root.context.getString(R.string.date_format_dd_mmm), locale)
 
         fun bind(record: RegistroSono) {
             val context = binding.root.context
@@ -46,10 +47,11 @@ class SleepHistoryAdapter : ListAdapter<RegistroSono, SleepHistoryAdapter.ViewHo
             val totalDuration = if (duration.isNegative) duration.plusDays(1) else duration
             val hours = totalDuration.toHours()
             val minutes = totalDuration.toMinutes() % 60
-            binding.textViewDuration.text = "${hours}h ${minutes}m"
+            binding.textViewDuration.text = context.getString(R.string.sleep_log_duration_format, hours, minutes)
 
+            // ✅ CORREÇÃO: Usa a função de extensão 'getDisplayName'
             val quality = try { QualidadeSono.valueOf(record.qualidade) } catch (e: Exception) { QualidadeSono.RAZOAVEL }
-            binding.textViewQuality.text = quality.displayName
+            binding.textViewQuality.text = quality.getDisplayName(context)
 
             val qualityColor = when (quality) {
                 QualidadeSono.BOM -> R.color.success_green

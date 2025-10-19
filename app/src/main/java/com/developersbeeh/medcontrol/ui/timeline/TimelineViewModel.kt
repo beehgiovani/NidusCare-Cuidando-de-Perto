@@ -19,7 +19,7 @@ import javax.inject.Inject
 private const val TAG = "TimelineViewModel"
 
 enum class TimelineFilter {
-    ALL, DOSE, NOTE, ACTIVITY, INSIGHT
+    ALL, DOSE, NOTE, ACTIVITY, INSIGHT, WELLBEING // ✅ Adicionado WELLBEING
 }
 
 @HiltViewModel
@@ -30,23 +30,17 @@ class TimelineViewModel @Inject constructor(
     private val _filter = MutableStateFlow(TimelineFilter.ALL)
     private val _dependentId = MutableStateFlow<String?>(null)
 
-    // ✅ CORREÇÃO: O fluxo de paginação agora combina o ID do dependente E o filtro.
-    // flatMapLatest cancela a busca anterior e inicia uma nova sempre que o ID ou o filtro mudam.
     @OptIn(ExperimentalCoroutinesApi::class)
     val timelinePagerFlow: Flow<PagingData<TimelineListItem>> =
         combine(_dependentId.filterNotNull(), _filter) { id, filter ->
-            // Este Pair (id, filter) será emitido sempre que qualquer um dos dois mudar
             Pair(id, filter)
         }.flatMapLatest { (id, filter) ->
-            // O repositório agora é chamado com o filtro, que criará uma nova PagingSource
             firestoreRepository.getTimelinePager(id, filter).flow
         }.map { pagingData ->
             pagingData.map { event ->
-                // Mapeia o TimelineEvent bruto para o nosso item de UI
                 event.toTimelineLogItem()
             }
         }.map { pagingData ->
-            // Insere os separadores (cabeçalhos de data)
             pagingData.insertSeparators { before, after ->
                 if (after == null) {
                     return@insertSeparators null
@@ -60,7 +54,7 @@ class TimelineViewModel @Inject constructor(
                     null
                 }
             }
-        }.cachedIn(viewModelScope) // Cacheia os resultados no ViewModelScope
+        }.cachedIn(viewModelScope)
 
     fun initialize(dependentId: String) {
         if (_dependentId.value == dependentId) return
@@ -68,8 +62,6 @@ class TimelineViewModel @Inject constructor(
     }
 
     fun setFilter(filter: TimelineFilter) {
-        // ✅ CORREÇÃO: Atualizar este valor agora aciona automaticamente
-        // a recarga do timelinePagerFlow graças ao 'combine'.
         _filter.value = filter
     }
 
@@ -79,6 +71,7 @@ class TimelineViewModel @Inject constructor(
             "NOTE" -> TimelineItemCategory.NOTE
             "ACTIVITY" -> TimelineItemCategory.ACTIVITY
             "INSIGHT" -> TimelineItemCategory.INSIGHT
+            "WELLBEING" -> TimelineItemCategory.WELLBEING // ✅ Mapeado
             else -> {
                 Log.w(TAG, "Tipo de evento da timeline desconhecido: '${this.type}'. Classificando como ACTIVITY.")
                 TimelineItemCategory.ACTIVITY
@@ -90,7 +83,8 @@ class TimelineViewModel @Inject constructor(
                 id = this.id,
                 timestamp = this.getLocalDateTime(),
                 description = this.description,
-                author = this.author,
+                // ✅ CORREÇÃO: Mapeia 'authorName' (do Firestore) para 'author' (da UI)
+                author = this.authorName,
                 iconRes = TimelineIconMapper.getIconRes(this.icon),
                 iconTintRes = TimelineIconMapper.getColorRes(this.type),
                 category = category,

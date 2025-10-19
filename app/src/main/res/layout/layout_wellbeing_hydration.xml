@@ -19,7 +19,7 @@
             android:id="@+id/labelHydration"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Hidratação"
+            android:text="@string/category_hydration"
             android:textAppearance="?attr/textAppearanceTitleMedium"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
@@ -39,7 +39,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
-            android:text="ml"
+            android:text="@string/unit_ml"
             android:textAppearance="?attr/textAppearanceBodyMedium"
             android:textColor="?attr/colorOnSurfaceVariant"
             app:layout_constraintBaseline_toBaselineOf="@id/textViewConsumed"
@@ -81,7 +81,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
                 android:layout_weight="1"
-                android:text="+200 ml" />
+                android:text="@string/hydration_add_200ml" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/buttonAdd500ml"
@@ -89,7 +89,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="+500 ml" />
+                android:text="@string/hydration_add_500ml" />
         </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 </com.google.android.material.card.MaterialCardView>

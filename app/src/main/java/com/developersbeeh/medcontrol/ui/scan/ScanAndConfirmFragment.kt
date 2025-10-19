@@ -17,6 +17,7 @@ import androidx.navigation.fragment.navArgs
 import com.developersbeeh.medcontrol.BuildConfig
 import com.developersbeeh.medcontrol.R
 import com.developersbeeh.medcontrol.databinding.FragmentScanAndConfirmBinding
+import com.developersbeeh.medcontrol.ui.common.LoadingDialogFragment // ✅ ADIÇÃO
 import com.google.android.material.datepicker.MaterialDatePicker
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.AndroidEntryPoint
@@ -39,6 +40,9 @@ class ScanAndConfirmFragment : Fragment() {
     private var currentPhotoUri: Uri? = null
 
     private val expirationDateFormatter = DateTimeFormatter.ofPattern("MM/yyyy")
+
+    // ✅ ADIÇÃO: Variável para o diálogo
+    private var loadingDialog: LoadingDialogFragment? = null
 
     private val takePicture = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success) {
@@ -77,8 +81,23 @@ class ScanAndConfirmFragment : Fragment() {
     }
 
     private fun observeViewModel() {
+        // ✅ ADIÇÃO: Observadores para o diálogo de loading
+        viewModel.showLoading.observe(viewLifecycleOwner) { event ->
+            event.getContentIfNotHandled()?.let { message ->
+                loadingDialog = LoadingDialogFragment.newInstance(message)
+                loadingDialog?.show(childFragmentManager, LoadingDialogFragment.TAG)
+            }
+        }
+
+        viewModel.hideLoading.observe(viewLifecycleOwner) { event ->
+            event.getContentIfNotHandled()?.let {
+                loadingDialog?.dismissAllowingStateLoss()
+                loadingDialog = null
+            }
+        }
+
         viewModel.scanState.observe(viewLifecycleOwner) { state ->
-            binding.loadingOverlay.isVisible = state is ScanState.Loading
+            // ✅ CORREÇÃO: Remove a lógica do 'loadingOverlay'
             binding.buttonSalvar.isEnabled = state is ScanState.Success
 
             when (state) {

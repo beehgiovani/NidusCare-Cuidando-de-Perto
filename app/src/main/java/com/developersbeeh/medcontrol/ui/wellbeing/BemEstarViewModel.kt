@@ -1,9 +1,11 @@
 package com.developersbeeh.medcontrol.ui.wellbeing
 
+import android.app.Application
 import android.net.Uri
+import android.util.Log
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.developersbeeh.medcontrol.R
 import com.developersbeeh.medcontrol.data.UserPreferences
@@ -25,6 +27,8 @@ import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 import kotlin.math.abs
+// ✅ IMPORT ADICIONADO: Importa a função de extensão do pacote 'meals'
+import com.developersbeeh.medcontrol.ui.meals.getDisplayName
 
 data class BemEstarUiState(
     val dependente: Dependente? = null,
@@ -68,8 +72,9 @@ class BemEstarViewModel @Inject constructor(
     private val firestoreRepository: FirestoreRepository,
     private val userRepository: UserRepository,
     private val userPreferences: UserPreferences,
-    private val mealAnalysisRepository: MealAnalysisRepository
-) : ViewModel() {
+    private val mealAnalysisRepository: MealAnalysisRepository,
+    private val application: Application
+) : AndroidViewModel(application) {
 
     private val _dependentId = MutableLiveData<String>()
 
@@ -177,10 +182,10 @@ class BemEstarViewModel @Inject constructor(
             val heightInMeters = height / 100
             val imc = weight / (heightInMeters * heightInMeters)
             val (classification, color) = when {
-                imc < 18.5 -> "Abaixo do peso" to R.color.warning_orange
-                imc < 25 -> "Peso normal" to R.color.success_green
-                imc < 30 -> "Sobrepeso" to R.color.warning_orange
-                else -> "Obesidade" to R.color.error_red
+                imc < 18.5 -> application.getString(R.string.imc_classification_underweight) to R.color.warning_orange
+                imc < 25 -> application.getString(R.string.imc_classification_normal) to R.color.success_green
+                imc < 30 -> application.getString(R.string.imc_classification_overweight) to R.color.warning_orange
+                else -> application.getString(R.string.imc_classification_obesity) to R.color.error_red
             }
             return ImcResult(imc, classification, color)
         }
@@ -213,15 +218,15 @@ class BemEstarViewModel @Inject constructor(
 
         when {
             abs(difference) <= 0.5 -> {
-                progressText = "Meta atingida! Parabéns!"
+                progressText = application.getString(R.string.goal_achieved_congrats)
                 color = R.color.success_green
             }
             currentWeight > targetWeight -> {
-                progressText = "Faltam ${String.format(Locale.getDefault(), "%.1f", difference)}kg para sua meta de ${targetWeight}kg"
+                progressText = application.getString(R.string.goal_to_go_format_kg, String.format(Locale.getDefault(), "%.1f", difference), targetWeight.toString())
                 color = R.color.md_theme_primary
             }
             else -> {
-                progressText = "Faltam ${String.format(Locale.getDefault(), "%.1f", abs(difference))}kg para sua meta de ${targetWeight}kg"
+                progressText = application.getString(R.string.goal_to_go_format_kg, String.format(Locale.getDefault(), "%.1f", abs(difference)), targetWeight.toString())
                 color = R.color.md_theme_secondary
             }
         }
@@ -232,7 +237,7 @@ class BemEstarViewModel @Inject constructor(
         viewModelScope.launch {
             val dependentId = _dependentId.value ?: return@launch
             if (newWeight.isBlank()) {
-                _actionFeedback.postValue(Event("Por favor, insira um valor de peso válido."))
+                _actionFeedback.postValue(Event(application.getString(R.string.error_invalid_weight_value)))
                 return@launch
             }
             val note = HealthNote(
@@ -242,10 +247,10 @@ class BemEstarViewModel @Inject constructor(
             firestoreRepository.saveHealthNote(dependentId, note)
             val result = firestoreRepository.updateDependentWeight(dependentId, newWeight)
             if(result.isSuccess) {
-                _actionFeedback.postValue(Event("Peso atualizado com sucesso!"))
-                saveLog(dependentId, "atualizou o peso para $newWeight kg", TipoAtividade.ANOTACAO_CRIADA)
+                _actionFeedback.postValue(Event(application.getString(R.string.feedback_weight_updated)))
+                saveLog(dependentId, application.getString(R.string.log_weight_updated, newWeight), TipoAtividade.ANOTACAO_CRIADA)
             } else {
-                _actionFeedback.postValue(Event("Falha ao atualizar o peso."))
+                _actionFeedback.postValue(Event(application.getString(R.string.feedback_weight_update_fail)))
             }
         }
     }
@@ -254,12 +259,13 @@ class BemEstarViewModel @Inject constructor(
         viewModelScope.launch {
             val dependentId = _dependentId.value ?: return@launch
             val novoRegistro = Hidratacao(quantidadeMl = quantidadeMl)
+            // 'novoRegistro' agora tem 'dateString' graças ao 'init' do modelo
             val result = firestoreRepository.saveHidratacaoRecord(dependentId, novoRegistro)
             if (result.isSuccess) {
-                saveLog(dependentId, "registrou o consumo de $quantidadeMl ml de água", TipoAtividade.ANOTACAO_CRIADA)
-                _actionFeedback.postValue(Event("$quantidadeMl ml de água registrados!"))
+                saveLog(dependentId, application.getString(R.string.log_water_intake, quantidadeMl), TipoAtividade.ANOTACAO_CRIADA)
+                _actionFeedback.postValue(Event(application.getString(R.string.feedback_water_logged, quantidadeMl)))
             } else {
-                _actionFeedback.postValue(Event("Erro ao registrar consumo de água."))
+                _actionFeedback.postValue(Event(application.getString(R.string.feedback_water_log_fail)))
             }
         }
     }
@@ -268,35 +274,41 @@ class BemEstarViewModel @Inject constructor(
         viewModelScope.launch {
             val dependentId = _dependentId.value ?: return@launch
             if (tipo.isBlank() || duracao <= 0) {
-                _actionFeedback.postValue(Event("Por favor, preencha o tipo e a duração da atividade."))
+                _actionFeedback.postValue(Event(application.getString(R.string.error_activity_duration_required)))
                 return@launch
             }
             val novoRegistro = AtividadeFisica(tipo = tipo, duracaoMinutos = duracao)
             val result = firestoreRepository.saveAtividadeFisicaRecord(dependentId, novoRegistro)
             if (result.isSuccess) {
-                saveLog(dependentId, "registrou $duracao minutos de $tipo", TipoAtividade.ANOTACAO_CRIADA)
-                _actionFeedback.postValue(Event("Atividade registrada com sucesso!"))
+                saveLog(dependentId, application.getString(R.string.log_activity_logged, duracao, tipo), TipoAtividade.ANOTACAO_CRIADA)
+                _actionFeedback.postValue(Event(application.getString(R.string.feedback_activity_logged)))
             } else {
-                _actionFeedback.postValue(Event("Erro ao registrar atividade."))
+                _actionFeedback.postValue(Event(application.getString(R.string.feedback_activity_log_fail)))
             }
         }
     }
 
-    fun addRefeicao(tipo: TipoRefeicao, descricao: String, calorias: Int?) {
+    // ✅ CORREÇÃO: Função atualizada para receber 'aiResult'
+    fun addRefeicao(tipo: TipoRefeicao, descricao: String, calorias: Int?, aiResult: MealAnalysisResult?) {
         viewModelScope.launch {
             val dependentId = _dependentId.value ?: return@launch
             if (descricao.isBlank()) {
-                _actionFeedback.postValue(Event("Por favor, descreva a refeição."))
+                _actionFeedback.postValue(Event(application.getString(R.string.error_meal_description_required)))
                 return@launch
             }
-            val novoRegistro = Refeicao(tipo = tipo.name, descricao = descricao, calorias = calorias)
+
+            val caloriasFinais = calorias ?: aiResult?.calorias
+            val novoRegistro = Refeicao(tipo = tipo.name, descricao = descricao, calorias = caloriasFinais)
             val result = firestoreRepository.saveRefeicaoRecord(dependentId, novoRegistro)
             if (result.isSuccess) {
-                val logDesc = calorias?.let { "registrou o '${tipo.displayName}' (~${it}kcal)" } ?: "registrou o '${tipo.displayName}'"
+                val logDesc = caloriasFinais?.let {
+                    application.getString(R.string.log_meal_logged_kcal, tipo.getDisplayName(application), it)
+                } ?: application.getString(R.string.log_meal_logged, tipo.getDisplayName(application))
+
                 saveLog(dependentId, logDesc, TipoAtividade.ANOTACAO_CRIADA)
-                _actionFeedback.postValue(Event("Refeição registrada com sucesso!"))
+                _actionFeedback.postValue(Event(application.getString(R.string.feedback_meal_logged)))
             } else {
-                _actionFeedback.postValue(Event("Erro ao registrar refeição."))
+                _actionFeedback.postValue(Event(application.getString(R.string.feedback_meal_log_fail)))
             }
         }
     }
@@ -318,10 +330,10 @@ class BemEstarViewModel @Inject constructor(
             if (result.isSuccess) {
                 val duracao = Duration.between(horaDormir, horaAcordar)
                 val totalHoras = if(duracao.isNegative) duracao.plusDays(1).toHours() else duracao.toHours()
-                saveLog(dependentId, "registrou ${totalHoras}h de sono com $interrupcoes interrupções", TipoAtividade.ANOTACAO_CRIADA)
-                _actionFeedback.postValue(Event("Registro de sono salvo com sucesso!"))
+                saveLog(dependentId, application.getString(R.string.log_sleep_logged, totalHoras, interrupcoes), TipoAtividade.ANOTACAO_CRIADA)
+                _actionFeedback.postValue(Event(application.getString(R.string.feedback_sleep_logged)))
             } else {
-                _actionFeedback.postValue(Event("Erro ao salvar o registro de sono."))
+                _actionFeedback.postValue(Event(application.getString(R.string.feedback_sleep_log_fail)))
             }
         }
     }
@@ -334,7 +346,7 @@ class BemEstarViewModel @Inject constructor(
 
             val records = firestoreRepository.getSonoHistory(dependentId, sevenDaysAgo, today).first()
             if (records.size < 3) {
-                _actionFeedback.postValue(Event("Não há histórico suficiente para uma sugestão."))
+                _actionFeedback.postValue(Event(application.getString(R.string.feedback_sleep_suggestion_unavailable)))
                 return@launch
             }
 
@@ -375,7 +387,7 @@ class BemEstarViewModel @Inject constructor(
             result.onSuccess {
                 _mealAnalysisState.postValue(MealAnalysisState.Success(it))
             }.onFailure {
-                _mealAnalysisState.postValue(MealAnalysisState.Error(it.message ?: "Erro desconhecido na análise."))
+                _mealAnalysisState.postValue(MealAnalysisState.Error(it.message ?: application.getString(R.string.error_meal_analysis_unknown)))
             }
         }
     }
@@ -390,10 +402,10 @@ class BemEstarViewModel @Inject constructor(
             userRepository.getCurrentUser()?.uid ?: ""
         } else { "dependent_user" }
         val log = Atividade(
-            descricao = "$autorNome $descricao",
+            descricao = descricao,
             tipo = tipo,
             autorId = autorId,
-            autorNome = autorNome
+            autorNome = autorNome // O 'getAuthorName' no backend usará este campo
         )
         firestoreRepository.saveActivityLog(dependentId, log)
     }

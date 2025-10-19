@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.navArgs
+import com.developersbeeh.medcontrol.R
 import com.developersbeeh.medcontrol.databinding.FragmentArchivedMedicationsBinding
 import com.google.android.material.tabs.TabLayoutMediator
 import dagger.hilt.android.AndroidEntryPoint
@@ -28,16 +29,16 @@ class ArchivedMedicationsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        (activity as? AppCompatActivity)?.supportActionBar?.title = "Gerenciar: ${args.dependentName}"
+        (activity as? AppCompatActivity)?.supportActionBar?.title = getString(R.string.archived_meds_title, args.dependentName)
 
         val adapter = ArchivedTabsAdapter(this)
         binding.viewPager.adapter = adapter
 
         TabLayoutMediator(binding.tabLayout, binding.viewPager) { tab, position ->
             tab.text = when (position) {
-                0 -> "Tratamentos Concluídos"
-                1 -> "Estoque Zerado"
-                else -> "Lotes Vencidos"
+                0 -> getString(R.string.archived_tab_finished)
+                1 -> getString(R.string.archived_tab_zero_stock)
+                else -> getString(R.string.archived_tab_expired)
             }
         }.attach()
     }

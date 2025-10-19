@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.developersbeeh.medcontrol.R
 import com.developersbeeh.medcontrol.data.model.Medicamento
 import com.developersbeeh.medcontrol.databinding.ItemArchivedMedicationBinding
 
@@ -18,23 +19,23 @@ class ArchivedMedicationAdapter(
         fun bind(pair: Pair<Medicamento, String>) {
             val medicamento = pair.first
             val reason = pair.second
+            val context = binding.root.context
 
             binding.textViewMedicationName.text = medicamento.nome
             binding.textViewArchiveReason.text = reason
 
-            // Configura os botões com base no tipo de filtro da lista
             when (filterType) {
                 ArchivedListFragment.Companion.FilterType.FINISHED -> {
-                    binding.buttonPrimaryAction.text = "Reativar Tratamento"
-                    binding.buttonSecondaryAction.text = "Excluir"
+                    binding.buttonPrimaryAction.text = context.getString(R.string.action_reactivate_treatment)
+                    binding.buttonSecondaryAction.text = context.getString(R.string.action_delete)
                 }
                 ArchivedListFragment.Companion.FilterType.ZERO_STOCK -> {
-                    binding.buttonPrimaryAction.text = "Repor Estoque"
-                    binding.buttonSecondaryAction.text = "Parar de Rastrear"
+                    binding.buttonPrimaryAction.text = context.getString(R.string.action_refill_stock)
+                    binding.buttonSecondaryAction.text = context.getString(R.string.action_stop_tracking)
                 }
                 ArchivedListFragment.Companion.FilterType.EXPIRED -> {
-                    binding.buttonPrimaryAction.text = "Remover Vencidos"
-                    binding.buttonSecondaryAction.text = "Repor Estoque"
+                    binding.buttonPrimaryAction.text = context.getString(R.string.action_remove_expired)
+                    binding.buttonSecondaryAction.text = context.getString(R.string.action_refill_stock)
                 }
             }
 

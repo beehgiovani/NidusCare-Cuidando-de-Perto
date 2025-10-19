@@ -1,11 +1,10 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/sleep/SleepTrackerFragment.kt
 package com.developersbeeh.medcontrol.ui.sleep
 
-import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
@@ -49,6 +48,8 @@ class SleepTrackerFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         viewModel.initialize(args.dependentId)
 
+        (activity as? AppCompatActivity)?.supportActionBar?.title = getString(R.string.sleep_history_title)
+
         binding.recyclerViewSleepHistory.adapter = adapter
         binding.recyclerViewSleepHistory.layoutManager = LinearLayoutManager(requireContext())
 
@@ -58,19 +59,26 @@ class SleepTrackerFragment : Fragment() {
     private fun observeViewModel() {
         viewModel.uiState.observe(viewLifecycleOwner) { state ->
             binding.progressBar.isVisible = state is UiState.Loading
+            // ✅ CORREÇÃO: Acessa 'state.data' (a lista) diretamente
             binding.emptyState.root.isVisible = state is UiState.Success && state.data.isEmpty()
             binding.recyclerViewSleepHistory.isVisible = state is UiState.Success
 
-            if (state is UiState.Success) {
-                if (state.data.isEmpty()) {
-                    binding.emptyState.textViewErrorMessage.text = "Nenhum registro de sono encontrado."
-                } else {
-                    setupChart(state.data)
-                    adapter.submitList(state.data)
+            when (state) {
+                is UiState.Success -> {
+                    // ✅ CORREÇÃO: Acessa 'state.data' (a lista) diretamente
+                    if (state.data.isEmpty()) {
+                        binding.emptyState.textViewErrorMessage.text = getString(R.string.empty_state_no_sleep_records)
+                    } else {
+                        // ✅ CORREÇÃO: Passa 'state.data' (a lista)
+                        setupChart(state.data)
+                        adapter.submitList(state.data)
+                    }
                 }
-            } else if (state is UiState.Error) {
-                binding.emptyState.root.isVisible = true
-                binding.emptyState.textViewErrorMessage.text = state.message
+                is UiState.Error -> {
+                    binding.emptyState.root.isVisible = true
+                    binding.emptyState.textViewErrorMessage.text = state.message
+                }
+                else -> {}
             }
         }
     }
@@ -84,7 +92,7 @@ class SleepTrackerFragment : Fragment() {
         val entries = ArrayList<BarEntry>()
         val colors = ArrayList<Int>()
         val xAxisLabels = ArrayList<String>()
-        val dayFormatter = DateTimeFormatter.ofPattern("dd/MM")
+        val dayFormatter = DateTimeFormatter.ofPattern(getString(R.string.date_format_dd_mm))
 
         for (i in 0..6) {
             val date = sevenDaysAgo.plusDays(i.toLong())
@@ -112,7 +120,7 @@ class SleepTrackerFragment : Fragment() {
             xAxisLabels.add(date.format(dayFormatter))
         }
 
-        val dataSet = BarDataSet(entries, "Duração do Sono").apply {
+        val dataSet = BarDataSet(entries, getString(R.string.sleep_chart_label)).apply {
             this.colors = colors
             setDrawValues(false)
         }

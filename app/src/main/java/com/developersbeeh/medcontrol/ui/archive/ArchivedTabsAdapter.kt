@@ -10,8 +10,8 @@ class ArchivedTabsAdapter(fragment: Fragment) : FragmentStateAdapter(fragment) {
     override fun createFragment(position: Int): Fragment {
         return ArchivedListFragment.newInstance(
             when (position) {
-                0 -> ArchivedListFragment.Companion.FilterType.FINISHED
-                1 -> ArchivedListFragment.Companion.FilterType.ZERO_STOCK
+                 0 -> ArchivedListFragment.Companion.FilterType.FINISHED
+                 1 -> ArchivedListFragment.Companion.FilterType.ZERO_STOCK
                 else -> ArchivedListFragment.Companion.FilterType.EXPIRED
             }
         )

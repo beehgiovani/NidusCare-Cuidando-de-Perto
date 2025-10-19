@@ -19,7 +19,7 @@
             android:id="@+id/labelActivity"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Atividade Física"
+            android:text="@string/category_activity"
             android:textAppearance="?attr/textAppearanceTitleMedium"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
@@ -39,7 +39,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
-            android:text="min"
+            android:text="@string/unit_min"
             android:textAppearance="?attr/textAppearanceBodyMedium"
             android:textColor="?attr/colorOnSurfaceVariant"
             app:layout_constraintBaseline_toBaselineOf="@id/textViewMinutes"
@@ -88,7 +88,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="8dp"
                     android:layout_weight="1"
-                    android:text="Iniciar Cronômetro"
+                    android:text="@string/activity_start_timer"
                     app:icon="@drawable/ic_play" />
 
                 <com.google.android.material.button.MaterialButton
@@ -124,7 +124,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="8dp"
-                    android:text="Pausar"
+                    android:text="@string/activity_timer_pause"
                     app:icon="@drawable/ic_timer_pause" />
 
                 <com.google.android.material.button.MaterialButton
@@ -132,7 +132,7 @@
                     style="@style/Widget.Material3.Button.TonalButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Parar"
+                    android:text="@string/activity_timer_stop"
                     app:icon="@drawable/ic_timer_stop" />
 
             </LinearLayout>

@@ -1,7 +1,8 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/archive/ArchivedMedicationsViewModel.kt
 package com.developersbeeh.medcontrol.ui.archive
 
+import android.app.Application
 import androidx.lifecycle.*
+import com.developersbeeh.medcontrol.R
 import com.developersbeeh.medcontrol.data.model.EstoqueLote
 import com.developersbeeh.medcontrol.data.model.Medicamento
 import com.developersbeeh.medcontrol.data.model.TipoAtividade
@@ -16,14 +17,14 @@ import javax.inject.Inject
 @HiltViewModel
 class ArchivedMedicationsViewModel @Inject constructor(
     private val medicationRepository: MedicationRepository,
-    private val activityLogRepository: ActivityLogRepository
-) : ViewModel() {
+    private val activityLogRepository: ActivityLogRepository,
+    private val application: Application // Injetado
+) : AndroidViewModel(application) { // Herda de AndroidViewModel
 
     private val _dependentId = MutableLiveData<String>()
 
     val actionFeedback = MutableLiveData<Event<String>>()
 
-    // ✅ CORREÇÃO: Busca os medicamentos que estão marcados como arquivados.
     val archivedMedications: LiveData<List<Medicamento>> = _dependentId.switchMap { id ->
         if (id.isNotBlank()) {
             medicationRepository.getArchivedMedicamentos(id).asLiveData()
@@ -60,10 +61,10 @@ class ArchivedMedicationsViewModel @Inject constructor(
     fun restoreMedicamento(medicamento: Medicamento) = viewModelScope.launch {
         _dependentId.value?.let { depId ->
             medicationRepository.unarchiveMedicamento(depId, medicamento.id).onSuccess {
-                activityLogRepository.saveLog(depId, "restaurou o medicamento ${medicamento.nome}", TipoAtividade.TRATAMENTO_REATIVADO)
-                actionFeedback.postValue(Event("'${medicamento.nome}' foi restaurado para a lista principal."))
+                activityLogRepository.saveLog(depId, application.getString(R.string.log_med_restored, medicamento.nome), TipoAtividade.TRATAMENTO_REATIVADO)
+                actionFeedback.postValue(Event(application.getString(R.string.feedback_med_restored, medicamento.nome)))
             }.onFailure {
-                actionFeedback.postValue(Event("Falha ao restaurar medicamento."))
+                actionFeedback.postValue(Event(application.getString(R.string.feedback_med_restore_fail)))
             }
         }
     }
@@ -73,8 +74,8 @@ class ArchivedMedicationsViewModel @Inject constructor(
             val validLotes = medicamento.lotes.filter { it.dataValidade.isAfter(LocalDate.now().minusDays(1)) }
             val updatedMed = medicamento.copy(lotes = validLotes)
             medicationRepository.saveMedicamento(depId, updatedMed).onSuccess {
-                activityLogRepository.saveLog(depId, "removeu lotes vencidos de ${medicamento.nome}", TipoAtividade.MEDICAMENTO_EDITADO)
-                actionFeedback.postValue(Event("Lotes vencidos de ${medicamento.nome} foram removidos."))
+                activityLogRepository.saveLog(depId, application.getString(R.string.log_expired_lots_removed, medicamento.nome), TipoAtividade.MEDICAMENTO_EDITADO)
+                actionFeedback.postValue(Event(application.getString(R.string.feedback_expired_lots_removed, medicamento.nome)))
             }
         }
     }
@@ -83,19 +84,18 @@ class ArchivedMedicationsViewModel @Inject constructor(
         _dependentId.value?.let { depId ->
             val updatedMed = medicamento.copy(lotes = emptyList(), nivelDeAlertaEstoque = 0)
             medicationRepository.saveMedicamento(depId, updatedMed).onSuccess {
-                actionFeedback.postValue(Event("O rastreamento de estoque para ${medicamento.nome} foi desativado."))
+                actionFeedback.postValue(Event(application.getString(R.string.feedback_stock_tracking_stopped, medicamento.nome)))
             }
         }
     }
 
     fun deleteMedicationPermanently(medicamento: Medicamento) = viewModelScope.launch {
         _dependentId.value?.let { depId ->
-            // ✅ CORREÇÃO: Chamando a função correta do repositório
             medicationRepository.permanentlyDeleteMedicamento(depId, medicamento.id).onSuccess {
-                activityLogRepository.saveLog(depId, "excluiu permanentemente o medicamento ${medicamento.nome}", TipoAtividade.MEDICAMENTO_EXCLUIDO)
-                actionFeedback.postValue(Event("'${medicamento.nome}' foi excluído permanentemente."))
+                activityLogRepository.saveLog(depId, application.getString(R.string.log_med_deleted_permanently, medicamento.nome), TipoAtividade.MEDICAMENTO_EXCLUIDO)
+                actionFeedback.postValue(Event(application.getString(R.string.feedback_med_deleted_permanently, medicamento.nome)))
             }.onFailure {
-                actionFeedback.postValue(Event("Falha ao excluir permanentemente."))
+                actionFeedback.postValue(Event(application.getString(R.string.feedback_delete_permanent_fail)))
             }
         }
     }
@@ -103,10 +103,10 @@ class ArchivedMedicationsViewModel @Inject constructor(
     fun addStockLot(medicamento: Medicamento, novoLote: EstoqueLote) = viewModelScope.launch {
         _dependentId.value?.let { depId ->
             medicationRepository.addStockLot(depId, medicamento.id, novoLote).onSuccess {
-                activityLogRepository.saveLog(depId, "repos o estoque de ${medicamento.nome}", TipoAtividade.MEDICAMENTO_EDITADO)
-                actionFeedback.postValue(Event("Estoque de ${medicamento.nome} atualizado! O medicamento foi movido para a lista principal."))
+                activityLogRepository.saveLog(depId, application.getString(R.string.log_stock_refilled, medicamento.nome), TipoAtividade.MEDICAMENTO_EDITADO)
+                actionFeedback.postValue(Event(application.getString(R.string.feedback_stock_refilled, medicamento.nome)))
             }.onFailure {
-                actionFeedback.postValue(Event("Falha ao atualizar o estoque."))
+                actionFeedback.postValue(Event(application.getString(R.string.feedback_stock_refill_fail)))
             }
         }
     }

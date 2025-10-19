@@ -25,7 +25,7 @@ import javax.inject.Inject
 
 sealed class ScanState {
     object Idle : ScanState()
-    object Loading : ScanState()
+    // object Loading : ScanState() // Removido, será controlado por Event
     data class Success(val extractedData: ExtractedMedicationData) : ScanState()
     data class Error(val message: String) : ScanState()
 }
@@ -44,7 +44,7 @@ data class ExtractedMedicationData(
 class ScanAndConfirmViewModel @Inject constructor(
     private val storageRepository: StorageRepository,
     private val medicationRepository: MedicationRepository,
-    private val application: Application // Injetado
+    private val application: Application
 ) : ViewModel() {
 
     private val _scanState = MutableLiveData<ScanState>(ScanState.Idle)
@@ -53,9 +53,16 @@ class ScanAndConfirmViewModel @Inject constructor(
     private val _saveStatus = MutableLiveData<Event<Boolean>>()
     val saveStatus: LiveData<Event<Boolean>> = _saveStatus
 
+    // ✅ ADIÇÃO: LiveData para controlar o diálogo de loading
+    private val _showLoading = MutableLiveData<Event<String>>()
+    val showLoading: LiveData<Event<String>> = _showLoading
+
+    private val _hideLoading = MutableLiveData<Event<Unit>>()
+    val hideLoading: LiveData<Event<Unit>> = _hideLoading
+
     fun analyzeImage(imageUri: Uri, userId: String) {
         viewModelScope.launch {
-            _scanState.value = ScanState.Loading
+            _showLoading.value = Event(application.getString(R.string.analyzing_with_ai))
             val uploadResult = storageRepository.uploadImageForScan(imageUri, userId)
             uploadResult.onSuccess { gcsUri ->
                 try {
@@ -84,8 +91,11 @@ class ScanAndConfirmViewModel @Inject constructor(
                         e.message
                     }
                     _scanState.value = ScanState.Error(errorMessage ?: application.getString(R.string.error_unknown))
+                } finally {
+                    _hideLoading.postValue(Event(Unit)) // Esconde o loading
                 }
             }.onFailure {
+                _hideLoading.postValue(Event(Unit)) // Esconde o loading
                 _scanState.value = ScanState.Error(it.message ?: application.getString(R.string.error_uploading_image))
             }
         }

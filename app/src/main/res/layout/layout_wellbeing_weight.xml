@@ -18,7 +18,7 @@
             android:id="@+id/labelWeight"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Peso"
+            android:text="@string/category_weight"
             android:textAppearance="?attr/textAppearanceTitleMedium"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
@@ -38,7 +38,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
-            android:text="kg"
+            android:text="@string/unit_kg"
             android:textAppearance="?attr/textAppearanceBodyMedium"
             android:textColor="?attr/colorOnSurfaceVariant"
             app:layout_constraintBaseline_toBaselineOf="@id/textViewCurrentWeight"
@@ -49,7 +49,7 @@
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Atualizar"
+            android:text="@string/update"
             app:layout_constraintBottom_toBottomOf="@id/textViewWeightUnit"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="@id/textViewCurrentWeight" />
@@ -119,7 +119,7 @@
                 style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Definir Meta de Peso"
+                android:text="@string/weight_goal_not_set"
                 android:visibility="gone"
                 app:icon="@drawable/ic_goals" />
         </FrameLayout>

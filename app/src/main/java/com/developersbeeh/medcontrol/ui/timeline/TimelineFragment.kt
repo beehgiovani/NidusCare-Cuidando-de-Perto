@@ -47,7 +47,7 @@ class TimelineFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         viewModel.initialize(args.dependentId)
-        (activity as? AppCompatActivity)?.supportActionBar?.title = "Linha do Tempo de ${args.dependentName}"
+        (activity as? AppCompatActivity)?.supportActionBar?.title = getString(R.string.timeline_title, args.dependentName)
         userPreferences = UserPreferences(requireContext())
         setupRecyclerView()
         setupFilters()
@@ -59,29 +59,24 @@ class TimelineFragment : Fragment() {
     private fun setupRecyclerView() {
         adapter = TimelineAdapter()
         binding.recyclerViewTimeline.adapter = adapter
+
         binding.recyclerViewTimeline.layoutManager = LinearLayoutManager(requireContext())
 
-        // ✅ CORREÇÃO: Lógica do listener refeita para tratar todos os estados de UI
         adapter.addLoadStateListener { loadState ->
             val refreshState = loadState.refresh
 
-            // Mostra o Shimmer apenas no carregamento inicial
             binding.shimmerLayout.isVisible = refreshState is LoadState.Loading && adapter.itemCount == 0
-            // O spinner do SwipeRefresh aparece em qualquer carregamento (inicial ou manual)
             binding.swipeRefreshLayout.isRefreshing = refreshState is LoadState.Loading
 
-            // O conteúdo (RecyclerView) só é visível quando o carregamento termina e há itens
             val hasContent = refreshState is LoadState.NotLoading && adapter.itemCount > 0
             binding.recyclerViewTimeline.isVisible = hasContent
 
-            // O estado de vazio só é visível quando o carregamento termina e não há itens
             val isEmpty = refreshState is LoadState.NotLoading && adapter.itemCount == 0
             binding.emptyStateLayout.root.isVisible = isEmpty
             if (isEmpty) {
                 setupEmptyState()
             }
 
-            // O estado de erro só é visível se ocorrer um erro
             val hasError = refreshState is LoadState.Error
             binding.errorStateLayout.root.isVisible = hasError
             if (hasError) {
@@ -111,6 +106,13 @@ class TimelineFragment : Fragment() {
     }
 
     private fun setupFilters() {
+        // ✅ REATORADO: Seta os textos dos Chips
+        binding.chipFilterAll.text = getString(R.string.timeline_filter_all)
+        binding.chipFilterDoses.text = getString(R.string.timeline_filter_doses)
+        binding.chipFilterNotes.text = getString(R.string.timeline_filter_notes)
+        binding.chipFilterOtherActivities.text = getString(R.string.timeline_filter_wellbeing)
+        binding.chipFilterInsights.text = getString(R.string.timeline_filter_insights)
+
         binding.chipGroupFilter.setOnCheckedStateChangeListener { group, checkedIds ->
             val filter = if (checkedIds.isEmpty()) {
                 group.check(R.id.chipFilterAll)
@@ -119,7 +121,7 @@ class TimelineFragment : Fragment() {
                 when (checkedIds.first()) {
                     R.id.chipFilterDoses -> TimelineFilter.DOSE
                     R.id.chipFilterNotes -> TimelineFilter.NOTE
-                    R.id.chipFilterOtherActivities -> TimelineFilter.ACTIVITY
+                    R.id.chipFilterOtherActivities -> TimelineFilter.ACTIVITY // Este filtro deve corresponder ao "Bem-Estar"
                     R.id.chipFilterInsights -> TimelineFilter.INSIGHT
                     else -> TimelineFilter.ALL
                 }
@@ -139,9 +141,10 @@ class TimelineFragment : Fragment() {
     private fun setupEmptyState() {
         val emptyBinding = LayoutEmptyStateBinding.bind(binding.emptyStateLayout.root)
         emptyBinding.lottieAnimationView.setAnimation(R.raw.empty_list)
-        emptyBinding.textViewEmptyTitle.text = "Nenhuma Atividade"
-        emptyBinding.textViewEmptySubtitle.text = "Quando você registrar doses, anotações ou outras atividades, elas aparecerão aqui."
-        emptyBinding.buttonEmptyAction.text = "Registrar Atividade"
+        // ✅ REATORADO: Usa strings.xml
+        emptyBinding.textViewEmptyTitle.text = getString(R.string.empty_state_timeline_title)
+        emptyBinding.textViewEmptySubtitle.text = getString(R.string.empty_state_timeline_subtitle)
+        emptyBinding.buttonEmptyAction.text = getString(R.string.empty_state_timeline_button)
         emptyBinding.buttonEmptyAction.setOnClickListener {
             val action = NavGraphDirections.actionGlobalToWellbeingDiaryFragment(args.dependentId, args.dependentName)
             findNavController().navigate(action)

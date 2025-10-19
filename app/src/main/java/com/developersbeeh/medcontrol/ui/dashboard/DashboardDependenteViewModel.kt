@@ -1,6 +1,6 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/dashboard/DashboardDependenteViewModel.kt
 package com.developersbeeh.medcontrol.ui.dashboard
 
+import android.app.Application
 import android.util.Log
 import androidx.lifecycle.*
 import com.developersbeeh.medcontrol.R
@@ -47,8 +47,9 @@ class DashboardDependenteViewModel @Inject constructor(
     private val medicationRepository: MedicationRepository,
     private val scheduleRepository: ScheduleRepository,
     private val reminderRepository: ReminderRepository,
-    private val userPreferences: UserPreferences
-) : ViewModel() {
+    private val userPreferences: UserPreferences,
+    private val application: Application // Injetado
+) : AndroidViewModel(application) { // Herda de AndroidViewModel
 
     private val _dependentId = MutableLiveData<String>()
     val dependente = MutableLiveData<Dependente?>()
@@ -100,7 +101,7 @@ class DashboardDependenteViewModel @Inject constructor(
                     calculateImc(dep.peso, dep.altura)
                     loadDynamicData(dep)
                 } else {
-                    Log.e(TAG, "Dependente com ID $id não foi encontrado.")
+                    Log.e(TAG, application.getString(R.string.error_dependent_not_found_id, id))
                 }
             }
         }
@@ -116,7 +117,7 @@ class DashboardDependenteViewModel @Inject constructor(
                 medicationRepository.getMedicamentos(dep.id),
                 medicationRepository.getDoseHistory(dep.id),
                 scheduleRepository.getSchedules(dep.id),
-                firestoreRepository.getHidratacaoHistory(dep.id, sevenDaysAgo,  sevenDaysAgo),
+                firestoreRepository.getHidratacaoHistory(dep.id, sevenDaysAgo, sevenDaysAgo),
                 firestoreRepository.getAtividadeFisicaHistory(dep.id, sevenDaysAgo, sevenDaysAgo),
                 firestoreRepository.getHealthNotes(dep.id),
                 reminderRepository.getReminders(dep.id)
@@ -136,7 +137,7 @@ class DashboardDependenteViewModel @Inject constructor(
 
                 processAllData(dep, meds, doses, schedules, hydration, activities, healthNotes, reminders)
             }.catch { e ->
-                Log.e(TAG, "Erro ao combinar fluxos de dados dinâmicos: ", e)
+                Log.e(TAG, application.getString(R.string.error_combining_data_streams), e)
             }.collect()
         }
     }
@@ -172,17 +173,17 @@ class DashboardDependenteViewModel @Inject constructor(
             .filter { it.timestamp.isAfter(now) }
             .minByOrNull { it.timestamp }
 
-        var summaryText = "Tenha um ótimo dia, $dependentName!"
+        var summaryText = application.getString(R.string.summary_greeting, dependentName)
         var nextEventTime: LocalDateTime? = null
 
         if (nextDose != null) {
             nextEventTime = nextDose
-            summaryText = "Próximo medicamento às ${nextDose.format(timeFormatter)}."
+            summaryText = application.getString(R.string.summary_next_medication, nextDose.format(timeFormatter))
         }
 
         if (nextSchedule != null) {
             if (nextEventTime == null || nextSchedule.timestamp.isBefore(nextEventTime)) {
-                summaryText = "Próximo compromisso: ${nextSchedule.titulo} às ${nextSchedule.timestamp.format(timeFormatter)}."
+                summaryText = application.getString(R.string.summary_next_appointment, nextSchedule.titulo, nextSchedule.timestamp.format(timeFormatter))
             }
         }
         _summaryText.postValue(summaryText)
@@ -209,34 +210,34 @@ class DashboardDependenteViewModel @Inject constructor(
     private fun buildCareManagementCategories(dependente: Dependente): List<DashboardCategory> {
         val list = mutableListOf<DashboardCategory>()
         if (!userPreferences.getIsCaregiver()) {
-            list.add(DashboardCategory("Emergência", R.drawable.ic_sos, ACTION_ID_EMERGENCY))
+            list.add(DashboardCategory(application.getString(R.string.category_emergency), R.drawable.ic_sos, ACTION_ID_EMERGENCY))
         }
-        list.add(DashboardCategory("Medicamentos", R.drawable.ic_medicamentoss, R.id.listMedicamentosFragment))
-        list.add(DashboardCategory("Farmácia Express", R.drawable.ic_local_pharmacy, R.id.action_global_to_pharmacySelectionFragment))
-        list.add(DashboardCategory("Diário de Bem-Estar", R.drawable.ic_bem_estar, R.id.wellbeingDiaryFragment))
-        list.add(DashboardCategory("Agenda", R.drawable.ic_agenda, R.id.healthScheduleFragment))
-        list.add(DashboardCategory("Anotações", R.drawable.ic_anocacoes, R.id.healthNotesFragment))
-        list.add(DashboardCategory("Lembretes", R.drawable.ic_alarm, R.id.action_global_to_reminders))
-        list.add(DashboardCategory("Caixa de Remédios", R.drawable.ic_farmacinha, R.id.farmacinhaFragment))
+        list.add(DashboardCategory(application.getString(R.string.category_medications), R.drawable.ic_medicamentoss, R.id.listMedicamentosFragment))
+        list.add(DashboardCategory(application.getString(R.string.category_pharmacy_express), R.drawable.ic_local_pharmacy, R.id.action_global_to_pharmacySelectionFragment))
+        list.add(DashboardCategory(application.getString(R.string.category_wellbeing_diary), R.drawable.ic_bem_estar, R.id.wellbeingDiaryFragment))
+        list.add(DashboardCategory(application.getString(R.string.category_schedule), R.drawable.ic_agenda, R.id.healthScheduleFragment))
+        list.add(DashboardCategory(application.getString(R.string.category_notes), R.drawable.ic_anocacoes, R.id.healthNotesFragment))
+        list.add(DashboardCategory(application.getString(R.string.category_reminders), R.drawable.ic_alarm, R.id.action_global_to_reminders))
+        list.add(DashboardCategory(application.getString(R.string.category_medication_box), R.drawable.ic_farmacinha, R.id.farmacinhaFragment))
         return list.distinctBy { it.actionId }
     }
 
     private fun buildHealthDataCategories(dependente: Dependente): List<DashboardCategory> {
         val list = mutableListOf<DashboardCategory>()
-        list.add(DashboardCategory("Linha do Tempo", R.drawable.ic_timlineic, R.id.timelineFragment))
-        list.add(DashboardCategory("Histórico de Doses", R.drawable.ic_historico_de_doses, R.id.action_global_to_doseHistoryFragment))
-        list.add(DashboardCategory("Documentos", R.drawable.ic_documentosg, R.id.healthDocumentsFragment))
-        list.add(DashboardCategory("Central Educativa", R.drawable.ic_educacao, R.id.action_global_to_educationCenterFragment))
-        list.add(DashboardCategory("Conquistas", R.drawable.ic_conquista, R.id.action_global_to_achievementsFragment))
+        list.add(DashboardCategory(application.getString(R.string.category_timeline), R.drawable.ic_timlineic, R.id.timelineFragment))
+        list.add(DashboardCategory(application.getString(R.string.category_dose_history), R.drawable.ic_historico_de_doses, R.id.action_global_to_doseHistoryFragment))
+        list.add(DashboardCategory(application.getString(R.string.category_documents), R.drawable.ic_documentosg, R.id.healthDocumentsFragment))
+        list.add(DashboardCategory(application.getString(R.string.category_education_center), R.drawable.ic_educacao, R.id.action_global_to_educationCenterFragment))
+        list.add(DashboardCategory(application.getString(R.string.category_achievements), R.drawable.ic_conquista, R.id.action_global_to_achievementsFragment))
         val age = AgeCalculator.calculateAge(dependente.dataDeNascimento)
         if (age != null && age <= 18) {
-            list.add(DashboardCategory("Vacinas", R.drawable.ic_vacinacao, R.id.action_global_to_vaccinationCardFragment))
+            list.add(DashboardCategory(application.getString(R.string.category_vaccines), R.drawable.ic_vacinacao, R.id.action_global_to_vaccinationCardFragment))
         }
         if (age != null && age >= 60) {
-            list.add(DashboardCategory("Cuidado Idoso", R.drawable.ic_seniorcuidado, R.id.action_global_to_geriatricCareFragment))
+            list.add(DashboardCategory(application.getString(R.string.category_geriatric_care), R.drawable.ic_seniorcuidado, R.id.action_global_to_geriatricCareFragment))
         }
         if (dependente.sexo == Sexo.FEMININO.name) {
-            list.add(DashboardCategory("Ciclo", R.drawable.ic_menstrual, R.id.action_global_to_cycleTrackerFragment))
+            list.add(DashboardCategory(application.getString(R.string.category_cycle), R.drawable.ic_menstrual, R.id.action_global_to_cycleTrackerFragment))
         }
         return list.distinctBy { it.actionId }
     }
@@ -247,13 +248,13 @@ class DashboardDependenteViewModel @Inject constructor(
         val isPremium = userPreferences.isPremium()
         if (isCaregiver) {
             if (isPremium) {
-                list.add(DashboardCategory("Chat IA", R.drawable.ic_conversa, R.id.action_global_to_chatFragment))
-                list.add(DashboardCategory("Análise Preditiva", R.drawable.ic_cerebro, ACTION_ID_SHOW_ANALYSIS_DIALOG))
-                list.add(DashboardCategory("Escanear Receita", R.drawable.ic_scanear, R.id.action_global_to_prescriptionScannerFragment))
-                list.add(DashboardCategory("Relatórios", R.drawable.ic_relatorios, R.id.reportsFragment))
+                list.add(DashboardCategory(application.getString(R.string.category_chat_ia), R.drawable.ic_conversa, R.id.action_global_to_chatFragment))
+                list.add(DashboardCategory(application.getString(R.string.category_predictive_analysis), R.drawable.ic_cerebro, ACTION_ID_SHOW_ANALYSIS_DIALOG))
+                list.add(DashboardCategory(application.getString(R.string.category_scan_prescription), R.drawable.ic_scanear, R.id.action_global_to_prescriptionScannerFragment))
+                list.add(DashboardCategory(application.getString(R.string.category_reports), R.drawable.ic_relatorios, R.id.reportsFragment))
             } else {
-                list.add(DashboardCategory("Funções Premium", R.drawable.ic_premiumc, R.id.action_global_to_premiumPlansFragment))
-                list.add(DashboardCategory("Relatórios", R.drawable.ic_relatorios, R.id.reportsFragment))
+                list.add(DashboardCategory(application.getString(R.string.category_premium_features), R.drawable.ic_premiumc, R.id.action_global_to_premiumPlansFragment))
+                list.add(DashboardCategory(application.getString(R.string.category_reports), R.drawable.ic_relatorios, R.id.reportsFragment))
             }
         }
         return list
@@ -262,13 +263,13 @@ class DashboardDependenteViewModel @Inject constructor(
     private fun buildProfileManagementCategories(dependente: Dependente): List<DashboardCategory> {
         val list = mutableListOf<DashboardCategory>()
         if (userPreferences.getIsCaregiver()) {
-            list.add(DashboardCategory("Metas", R.drawable.ic_metas, R.id.action_global_to_healthGoalsFragment))
-            list.add(DashboardCategory("Editar Perfil", R.drawable.ic_editarperfil, R.id.action_global_to_addEditDependentFragment))
-            list.add(DashboardCategory("Cuidadores", R.drawable.ic_convdependente, R.id.action_global_to_manageCaregiversFragment))
-            list.add(DashboardCategory("Credenciais", R.drawable.ic_credenciais, ACTION_ID_VIEW_CREDENTIALS))
-            list.add(DashboardCategory("Gerenciar Arq.", R.drawable.ic_gerenciar, R.id.action_global_to_archivedMedicationsFragment))
+            list.add(DashboardCategory(application.getString(R.string.category_goals), R.drawable.ic_metas, R.id.action_global_to_healthGoalsFragment))
+            list.add(DashboardCategory(application.getString(R.string.category_edit_profile), R.drawable.ic_editarperfil, R.id.action_global_to_addEditDependentFragment))
+            list.add(DashboardCategory(application.getString(R.string.category_caregivers), R.drawable.ic_convdependente, R.id.action_global_to_manageCaregiversFragment))
+            list.add(DashboardCategory(application.getString(R.string.category_credentials), R.drawable.ic_credenciais, ACTION_ID_VIEW_CREDENTIALS))
+            list.add(DashboardCategory(application.getString(R.string.category_manage_archived), R.drawable.ic_gerenciar, R.id.action_global_to_archivedMedicationsFragment))
             if (!dependente.isSelfCareProfile) {
-                list.add(DashboardCategory("Excluir Perfil", R.drawable.ic_delete_red, ACTION_ID_DELETE_DEPENDENT))
+                list.add(DashboardCategory(application.getString(R.string.category_delete_profile), R.drawable.ic_delete_red, ACTION_ID_DELETE_DEPENDENT))
             }
         }
         return list
@@ -286,7 +287,7 @@ class DashboardDependenteViewModel @Inject constructor(
             )
             val result = firestoreRepository.saveAnalysisHistory(historyEntry)
             if (result.isFailure) {
-                _actionFeedback.postValue(Event("Não foi possível salvar a análise no histórico."))
+                _actionFeedback.postValue(Event(application.getString(R.string.error_analysis_history_save)))
             }
         }
     }
@@ -300,8 +301,8 @@ class DashboardDependenteViewModel @Inject constructor(
             val newStatus = !it.usaAlarmeTelaCheia
             viewModelScope.launch {
                 firestoreRepository.updateUsaAlarmeTelaCheia(it.id, newStatus).onSuccess {
-                    val statusText = if (newStatus) "ativado" else "desativado"
-                    _actionFeedback.postValue(Event("Alarme de tela cheia $statusText."))
+                    val statusText = if (newStatus) application.getString(R.string.status_activated) else application.getString(R.string.status_deactivated)
+                    _actionFeedback.postValue(Event(application.getString(R.string.fullscreen_alarm_status_updated, statusText)))
                 }
             }
         }
@@ -309,7 +310,7 @@ class DashboardDependenteViewModel @Inject constructor(
 
     fun onDeleteDependentClicked() {
         if (dependente.value?.isSelfCareProfile == true) {
-            _actionFeedback.value = Event("Não é possível excluir seu próprio perfil de autocuidado a partir daqui.")
+            _actionFeedback.value = Event(application.getString(R.string.error_cannot_delete_self_profile_here))
         } else {
             _showDeleteConfirmation.value = Event(Unit)
         }
@@ -319,9 +320,9 @@ class DashboardDependenteViewModel @Inject constructor(
         dependente.value?.id?.let { dependentId ->
             viewModelScope.launch {
                 firestoreRepository.deleteDependentAndAllData(dependentId).onSuccess {
-                    _actionFeedback.postValue(Event("Dependente excluído com sucesso."))
+                    _actionFeedback.postValue(Event(application.getString(R.string.dependent_deleted_success)))
                 }.onFailure {
-                    _actionFeedback.postValue(Event("Erro ao excluir dependente: ${it.message}"))
+                    _actionFeedback.postValue(Event(application.getString(R.string.dependent_deleted_error, it.message)))
                 }
             }
         }
@@ -335,10 +336,10 @@ class DashboardDependenteViewModel @Inject constructor(
         viewModelScope.launch {
             val currentDependentId = _dependentId.value ?: return@launch
             firestoreRepository.triggerEmergencyAlert(currentDependentId).onSuccess {
-                _actionFeedback.postValue(Event("Alerta de emergência enviado aos seus cuidadores!"))
-                saveLog(currentDependentId, "acionou o botão de emergência", TipoAtividade.ANOTACAO_CRIADA)
+                _actionFeedback.postValue(Event(application.getString(R.string.emergency_alert_sent_success)))
+                saveLog(currentDependentId, application.getString(R.string.log_emergency_button_pressed), TipoAtividade.ANOTACAO_CRIADA)
             }.onFailure {
-                _actionFeedback.postValue(Event("Falha ao enviar alerta. Verifique sua conexão."))
+                _actionFeedback.postValue(Event(application.getString(R.string.emergency_alert_sent_fail)))
             }
         }
     }
@@ -347,9 +348,9 @@ class DashboardDependenteViewModel @Inject constructor(
         symptoms: String, startDate: LocalDate, endDate: LocalDate,
         includeDoseHistory: Boolean, includeHealthNotes: Boolean, includeContinuousMeds: Boolean
     ): Result<String> {
-        _showLoading.postValue(Event("Analisando..."))
+        _showLoading.postValue(Event(application.getString(R.string.analysis_loading_message)))
         try {
-            val currentDependentId = _dependentId.value ?: return Result.failure(Exception("ID do dependente não encontrado."))
+            val currentDependentId = _dependentId.value ?: return Result.failure(Exception(application.getString(R.string.error_dependent_id_not_found)))
             return firestoreRepository.getPredictiveAnalysis(
                 currentDependentId, symptoms, startDate, endDate,
                 includeDoseHistory, includeHealthNotes, includeContinuousMeds, dependente.value
@@ -366,10 +367,10 @@ class DashboardDependenteViewModel @Inject constructor(
             val heightInMeters = height / 100
             val imc = weight / (heightInMeters * heightInMeters)
             val (classification, color) = when {
-                imc < 18.5 -> "Abaixo do peso" to R.color.warning_orange
-                imc < 25 -> "Peso normal" to R.color.success_green
-                imc < 30 -> "Sobrepeso" to R.color.warning_orange
-                else -> "Obesidade" to R.color.error_red
+                imc < 18.5 -> application.getString(R.string.imc_classification_underweight) to R.color.warning_orange
+                imc < 25 -> application.getString(R.string.imc_classification_normal) to R.color.success_green
+                imc < 30 -> application.getString(R.string.imc_classification_overweight) to R.color.warning_orange
+                else -> application.getString(R.string.imc_classification_obesity) to R.color.error_red
             }
             _imcResult.postValue(ImcResult(imc, classification, color))
         } else {
@@ -397,9 +398,9 @@ class DashboardDependenteViewModel @Inject constructor(
         val progress = if (totalDistance > 0.1f) ((distanceCovered / totalDistance) * 100).toInt().coerceIn(0, 100) else 100
         val difference = currentWeight - targetWeight
         val (progressText, color) = when {
-            abs(difference) <= 0.5 -> "Meta atingida!" to R.color.success_green
-            currentWeight > targetWeight -> "Faltam ${String.format(Locale.getDefault(), "%.1f", difference)} kg para sua meta" to R.color.md_theme_primary
-            else -> "Faltam ${String.format(Locale.getDefault(), "%.1f", abs(difference))} kg para sua meta" to R.color.md_theme_secondary
+            abs(difference) <= 0.5 -> application.getString(R.string.goal_achieved) to R.color.success_green
+            currentWeight > targetWeight -> application.getString(R.string.goal_to_go_format, difference) to R.color.md_theme_primary
+            else -> application.getString(R.string.goal_to_go_format, abs(difference)) to R.color.md_theme_secondary
         }
         _weightGoalStatus.postValue(WeightGoalStatus(progress, progressText, color))
     }

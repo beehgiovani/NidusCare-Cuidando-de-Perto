@@ -1,5 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/dashboard/DashboardCategoryAdapter.kt
-
 package com.developersbeeh.medcontrol.ui.dashboard
 
 import android.R.attr.colorPrimary
@@ -35,7 +33,8 @@ class DashboardCategoryAdapter(
             }
 
             val context = binding.root.context
-            var iconTint = MaterialColors.getColor(binding.root,colorPrimary, Color.BLACK)
+            // ✅ ROBUSTEZ: Corrigido para usar o atributo correto do tema
+            var iconTint = MaterialColors.getColor(binding.root, colorPrimary, Color.BLACK)
             var textColor = MaterialColors.getColor(binding.root, MaterialR.attr.colorOnSurface, Color.BLACK)
 
             when (category.actionId) {

@@ -60,12 +60,15 @@ class MealHistoryAdapter : ListAdapter<MealListItem, RecyclerView.ViewHolder>(Di
             val context = binding.root.context
             val meal = mealItem.refeicao
             binding.textViewDescription.text = meal.descricao
+
+            // ✅ REATORADO: Usa a função de extensão para obter o nome traduzido
             binding.textViewMealType.text = try {
-                TipoRefeicao.valueOf(meal.tipo).displayName
+                TipoRefeicao.valueOf(meal.tipo).getDisplayName(context)
             } catch (e: Exception) {
                 context.getString(R.string.meal_type_default)
             }
-            binding.textViewCalories.text = meal.calorias?.let { context.getString(R.string.value_kcal, it) } ?: ""
+
+            binding.textViewCalories.text = meal.calorias?.let { context.getString(R.string.value_kcal, it.toString()) } ?: ""
         }
     }
 

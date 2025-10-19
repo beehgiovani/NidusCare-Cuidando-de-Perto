@@ -26,7 +26,7 @@ data class MealScreenState(
 class MealTrackerViewModel @Inject constructor(
     private val firestoreRepository: FirestoreRepository,
     private val application: Application // Injetado
-) : ViewModel() {
+) : AndroidViewModel(application) { // Herda de AndroidViewModel
 
     private val _uiState = MutableLiveData<UiState<MealScreenState>>()
     val uiState: LiveData<UiState<MealScreenState>> = _uiState

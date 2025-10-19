@@ -45,9 +45,17 @@ class CycleTrackerFragment : Fragment() {
     private val viewModel: CycleTrackerViewModel by viewModels()
     private val args: CycleTrackerFragmentArgs by navArgs()
 
-    private val monthTitleFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale("pt", "BR"))
+    // ✅ ROBUSTEZ: Formatters agora usam recursos de string
+    private lateinit var monthTitleFormatter: DateTimeFormatter
+    private lateinit var dateFormatter: DateTimeFormatter
+    private lateinit var locale: Locale
+
+    // ✅ ROBUSTEZ: Mapas para vincular Chips a Enums de forma segura
+    private val flowChipMap = mutableMapOf<Int, FlowIntensity>()
+    private val symptomChipMap = mutableMapOf<Int, Symptom>()
+    private val moodChipMap = mutableMapOf<Int, Mood>()
+
     private var selectedDate: LocalDate? = null
-    private val dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
 
     inner class DayViewContainer(view: View) : ViewContainer(view) {
         val textView: TextView = CalendarDayCycleLayoutBinding.bind(view).calendarDayText
@@ -68,13 +76,19 @@ class CycleTrackerFragment : Fragment() {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentCycleTrackerBinding.inflate(inflater, container, false)
+
+        // ✅ ROBUSTEZ: Inicializa formatters e locale aqui
+        locale = Locale(getString(R.string.locale_pt), getString(R.string.locale_br))
+        monthTitleFormatter = DateTimeFormatter.ofPattern(getString(R.string.calendar_month_year_format), locale)
+        dateFormatter = DateTimeFormatter.ofPattern(getString(R.string.date_format_dd_mm_yyyy))
+
         return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         viewModel.initialize(args.dependentId)
-        (activity as? AppCompatActivity)?.supportActionBar?.title = "Ciclo de ${args.dependentName}"
+        (activity as? AppCompatActivity)?.supportActionBar?.title = getString(R.string.cycle_tracker_title, args.dependentName)
 
         setupCalendar()
         setupListeners()
@@ -89,7 +103,7 @@ class CycleTrackerFragment : Fragment() {
         val daysOfWeek = daysOfWeek(firstDayOfWeek = java.time.DayOfWeek.SUNDAY)
 
         binding.weekDaysHeader.children.forEachIndexed { index, view ->
-            (view as TextView).text = daysOfWeek[index].getDisplayName(TextStyle.SHORT, Locale("pt", "BR")).uppercase()
+            (view as TextView).text = daysOfWeek[index].getDisplayName(TextStyle.SHORT, locale).uppercase()
         }
 
         calendarView.setup(startMonth, endMonth, daysOfWeek.first())
@@ -121,8 +135,6 @@ class CycleTrackerFragment : Fragment() {
             showDailyLogDialog(dateToLog)
         }
         binding.buttonHistory.setOnClickListener {
-            // Substitua 'action_cycleTrackerFragment_to_cycleHistoryFragment' pelo ID
-            // da sua action de navegação que criaremos no próximo passo.
             findNavController().navigate(R.id.action_cycleTrackerFragment_to_cycleHistoryFragment)
         }
     }
@@ -141,7 +153,8 @@ class CycleTrackerFragment : Fragment() {
             binding.textViewPrediction.text = state.predictionText
             binding.textViewCurrentPhase.text = state.currentPhase
 
-            selectedDate?.let { updateDetailsCard(it) }
+            // Atualiza o card de detalhes para a data selecionada ou para hoje
+            updateDetailsCard(selectedDate ?: LocalDate.now())
         }
 
         viewModel.actionFeedback.observe(viewLifecycleOwner) { event ->
@@ -153,39 +166,47 @@ class CycleTrackerFragment : Fragment() {
 
     private fun showDailyLogDialog(date: LocalDate) {
         if (date.isAfter(LocalDate.now())) {
-            Toast.makeText(context, "Não é possível registrar em uma data futura.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, getString(R.string.error_cannot_log_future_date), Toast.LENGTH_SHORT).show()
             return
         }
 
         val dialogBinding = DialogAddDailyCycleLogBinding.inflate(layoutInflater)
         val existingLog = viewModel.getLogForDate(date)
 
-        // Popula o campo de texto com a anotação existente
+        // Limpa os mapas para evitar IDs duplicados
+        flowChipMap.clear()
+        symptomChipMap.clear()
+        moodChipMap.clear()
+
         dialogBinding.editTextNotes.setText(existingLog.notes)
 
+        // ✅ ROBUSTEZ: Cria chips dinamicamente e os mapeia para os Enums
         FlowIntensity.values().forEach {
             val chip = (layoutInflater.inflate(R.layout.chip_choice, dialogBinding.chipGroupFlow, false) as Chip).apply {
-                text = it.displayName
+                text = it.getDisplayName(requireContext())
                 isChecked = existingLog.flow == it
                 id = View.generateViewId()
+                flowChipMap[id] = it // Mapeia o ID ao Enum
             }
             dialogBinding.chipGroupFlow.addView(chip)
         }
 
         Symptom.values().forEach {
             val chip = (layoutInflater.inflate(R.layout.chip_filter, dialogBinding.chipGroupSymptoms, false) as Chip).apply {
-                text = it.displayName
+                text = it.getDisplayName(requireContext())
                 isChecked = existingLog.symptoms.contains(it)
                 id = View.generateViewId()
+                symptomChipMap[id] = it // Mapeia o ID ao Enum
             }
             dialogBinding.chipGroupSymptoms.addView(chip)
         }
 
         Mood.values().forEach {
             val chip = (layoutInflater.inflate(R.layout.chip_choice, dialogBinding.chipGroupMood, false) as Chip).apply {
-                text = it.displayName
+                text = it.getDisplayName(requireContext())
                 isChecked = existingLog.mood == it
                 id = View.generateViewId()
+                moodChipMap[id] = it // Mapeia o ID ao Enum
             }
             dialogBinding.chipGroupMood.addView(chip)
         }
@@ -200,30 +221,22 @@ class CycleTrackerFragment : Fragment() {
         }
 
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Registro para o dia: ${date.format(dateFormatter)}")
+            .setTitle(getString(R.string.dialog_title_cycle_log_for_date, date.format(dateFormatter)))
             .setView(dialogBinding.root)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Salvar") { _, _ ->
-                val selectedFlow = FlowIntensity.values().find {
-                    val chipId = dialogBinding.chipGroupFlow.checkedChipId
-                    if (chipId != View.NO_ID) dialogBinding.chipGroupFlow.findViewById<Chip>(chipId).text == it.displayName else false
-                } ?: existingLog.flow
+            .setNegativeButton(getString(R.string.cancel), null)
+            .setPositiveButton(getString(R.string.save)) { _, _ ->
+
+                // ✅ ROBUSTEZ: Busca os Enums pelo ID do Chip checado
+                val selectedFlow = flowChipMap[dialogBinding.chipGroupFlow.checkedChipId] ?: existingLog.flow
 
                 val selectedSymptoms = dialogBinding.chipGroupSymptoms.checkedChipIds.mapNotNull { id ->
-                    dialogBinding.chipGroupSymptoms.findViewById<Chip>(id)?.let { chip ->
-                        Symptom.values().find { it.displayName == chip.text }
-                    }
+                    symptomChipMap[id]
                 }
 
-                val selectedMood = Mood.values().find {
-                    val chipId = dialogBinding.chipGroupMood.checkedChipId
-                    if (chipId != View.NO_ID) dialogBinding.chipGroupMood.findViewById<Chip>(chipId).text == it.displayName else false
-                }
+                val selectedMood = moodChipMap[dialogBinding.chipGroupMood.checkedChipId]
 
                 val hadActivity = dialogBinding.switchSexualActivity.isChecked
                 val wasProtected = if (hadActivity) dialogBinding.switchProtectedSex.isChecked else null
-
-                // Pega o texto do campo de anotações
                 val notesText = dialogBinding.editTextNotes.text.toString()
 
                 val newLog = existingLog.copy(
@@ -233,7 +246,7 @@ class CycleTrackerFragment : Fragment() {
                     mood = selectedMood,
                     hadSexualActivity = hadActivity,
                     wasProtected = wasProtected,
-                    notes = notesText // Salva o texto da anotação
+                    notes = notesText
                 )
                 viewModel.saveDailyLog(newLog)
             }
@@ -249,28 +262,29 @@ class CycleTrackerFragment : Fragment() {
         val hasFlow = log.flow != FlowIntensity.NONE
         binding.labelFlow.isVisible = hasFlow
         binding.textViewDetailsFlow.isVisible = hasFlow
-        binding.textViewDetailsFlow.text = if (hasFlow) log.flow.displayName else ""
+        binding.textViewDetailsFlow.text = if (hasFlow) log.flow.getDisplayName(requireContext()) else ""
 
         val hasSymptoms = log.symptoms.isNotEmpty()
         binding.labelSymptoms.isVisible = hasSymptoms
         binding.textViewDetailsSymptoms.isVisible = hasSymptoms
-        binding.textViewDetailsSymptoms.text = if (hasSymptoms) log.symptoms.joinToString(", ") { it.displayName } else ""
+        binding.textViewDetailsSymptoms.text = if (hasSymptoms) log.symptoms.joinToString(", ") { it.getDisplayName(requireContext()) } else ""
 
         val hasMood = log.mood != null
         binding.labelMood.isVisible = hasMood
         binding.textViewDetailsMood.isVisible = hasMood
-        binding.textViewDetailsMood.text = if (hasMood) log.mood?.displayName else ""
+        binding.textViewDetailsMood.text = if (hasMood) log.mood?.getDisplayName(requireContext()) else ""
 
         val hadActivity = log.hadSexualActivity
         binding.labelActivity.isVisible = hadActivity
         binding.textViewDetailsActivity.isVisible = hadActivity
         if (hadActivity) {
-            binding.textViewDetailsActivity.text = if (log.wasProtected == true) "Sim (com proteção)" else "Sim (sem proteção)"
+            binding.textViewDetailsActivity.text = if (log.wasProtected == true)
+                getString(R.string.sexual_activity_protected)
+            else getString(R.string.sexual_activity_unprotected)
         } else {
             binding.textViewDetailsActivity.text = ""
         }
 
-        // --- LÓGICA PARA EXIBIR A ANOTAÇÃO ---
         val hasNotes = !log.notes.isNullOrBlank()
         binding.labelNotes.isVisible = hasNotes
         binding.textViewDetailsNotes.isVisible = hasNotes
@@ -281,8 +295,7 @@ class CycleTrackerFragment : Fragment() {
 
         if (!hasAnyData) {
             binding.labelFlow.isVisible = true
-            binding.textViewDetailsFlow.text = "Nenhum registro para este dia."
-            // Garante que todos os outros campos fiquem ocultos
+            binding.textViewDetailsFlow.text = getString(R.string.no_record_for_this_day)
             binding.labelSymptoms.isVisible = false
             binding.textViewDetailsSymptoms.isVisible = false
             binding.labelMood.isVisible = false

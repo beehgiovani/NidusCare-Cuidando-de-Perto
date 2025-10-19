@@ -1209,9 +1209,7 @@ function buildMealAnalysisPrompt(healthProfile) {
 }
 
 
-// --- INÍCIO DAS FUNÇÕES AGENDADAS (ON SCHEDULE) ---
-
-// (A função onDataWritten que estava faltando está aqui)
+// ✅ FUNÇÃO CORRIGIDA (Substitua a existente)
 exports.onDataWritten = onDocumentWritten({
     document: "dependentes/{dependentId}/{collectionId}/{docId}",
     minInstances: 0
@@ -1228,7 +1226,6 @@ exports.onDataWritten = onDocumentWritten({
     if (!relevantCollections.includes(collectionId)) {
         return;
     }
-
     const db = admin.firestore();
     const timelineRef = db.collection("dependentes").doc(dependentId).collection("timeline").doc(`${collectionId}_${docId}`);
 
@@ -1245,12 +1242,14 @@ exports.onDataWritten = onDocumentWritten({
     const dataBefore = event.data.before ? event.data.before.data() : null;
     const dataAfter = event.data.after.data();
 
-    if (dataBefore && dataBefore.timestampString === dataAfter.timestampString) {
-        logger.info(`[Timeline] Gatilho ignorado para ${timelineRef.path} pois o timestamp não mudou.`);
-        return;
+    const afterTimestamp = dataAfter.timestamp || dataAfter.timestampString;
+    const beforeTimestamp = dataBefore ? (dataBefore.timestamp || dataBefore.timestampString) : null;
+    if (dataBefore && afterTimestamp === beforeTimestamp) {
+         logger.info(`[Timeline] Gatilho ignorado para ${timelineRef.path} pois o timestamp não mudou.`);
+         return;
     }
 
-    const eventData = await createTimelineEvent(dependentId, collectionId, docId, dataAfter);
+    const eventData = await createTimelineEvent(db, dependentId, collectionId, docId, dataAfter);
 
     if (eventData) {
         try {
@@ -1261,6 +1260,211 @@ exports.onDataWritten = onDocumentWritten({
         }
     }
 });
+
+// ✅ FUNÇÃO CORRIGIDA (Substitua a existente)
+async function getAuthorName(db, data) {
+    // 1. Tenta pegar o nome direto (de 'atividades')
+    if (data.autorNome) {
+        return data.autorNome;
+    }
+    
+    // 2. Tenta pegar o nome pelo 'userId' (de 'historico_doses', 'health_notes', etc.)
+    const userId = data.userId || data.autorId; // Verifica os dois campos
+    if (userId) {
+        try {
+            const userDoc = await db.collection("users").doc(userId).get();
+            if (userDoc.exists) {
+                return userDoc.data().name || "Cuidador"; 
+            } else {
+                return "Usuário"; // ID do usuário não encontrado
+            }
+        } catch (e) {
+            logger.warn(`[Timeline] Não foi possível buscar nome do autor para userId: ${userId}`, e);
+            return "Usuário"; // Fallback em caso de erro
+        }
+    }
+    
+    // 3. Fallback final
+    return "Sistema";
+}
+
+// ✅ FUNÇÃO CORRIGIDA (Substitua a existente)
+async function getMedicationName(db, dependentId, medId) {
+    if (!medId) return "Medicamento";
+    try {
+        const medDoc = await db.collection("dependentes").doc(dependentId).collection("medicamentos").doc(medId).get();
+        return medDoc.exists ? (medDoc.data().nome || "Medicamento") : "Medicamento";
+    } catch (error) {
+        logger.warn(`[Timeline] Medicamento ${medId} não encontrado.`, error);
+        return "Medicamento";
+    }
+}
+
+async function createTimelineEvent(db, dependentId, collectionId, docId, data) {
+    let timestamp;
+
+    // 1. Encontra o carimbo de data/hora correto
+    if (data.timestamp && typeof data.timestamp.toDate === 'function') {
+        timestamp = data.timestamp;
+    } else if (data.timestampString) {
+        try {
+            let dateString = data.timestampString;
+            
+            // ✅ CORREÇÃO FUSO HORÁRIO:
+            // Verifica se a string tem um 'T' e NÃO tem 'Z' ou offset ('+' ou '-')
+            if (dateString.includes('T') && !dateString.includes('Z') && !dateString.includes('+') && dateString.lastIndexOf('-') < 10) {
+                 // Pega a string até os segundos (ignorando milissegundos se houver)
+                 dateString = dateString.substring(0, 19);
+                 dateString += "-03:00"; // Adiciona o offset de São Paulo
+                 logger.info(`[Timeline] Fuso horário ajustado para: ${dateString}`);
+            }
+            timestamp = admin.firestore.Timestamp.fromDate(new Date(dateString));
+            
+        } catch (e) {
+            logger.warn(`[Timeline] timestampString inválido ${data.timestampString} em ${docId}`, e);
+            timestamp = admin.firestore.Timestamp.now();
+        }
+    } else if (collectionId === "sono_registros" && data.data) {
+        try {
+            const dateTimeString = `${data.data}T${data.horaDeAcordar || '12:00:00'}-03:00`;
+            timestamp = admin.firestore.Timestamp.fromDate(new Date(dateTimeString));
+        } catch (e) {
+             timestamp = admin.firestore.Timestamp.fromDate(new Date(data.data));
+        }
+    } else {
+        logger.warn(`[Timeline] Documento ${docId} em ${collectionId} não possui um campo de data/hora válido.`);
+        return null;
+    }
+    
+    // 2. Busca o nome do autor
+    const authorName = await getAuthorName(db, data);
+
+    // 3. Monta o objeto base
+    const eventBase = {
+        id: `${collectionId}_${docId}`,
+        dependentId: dependentId,
+        timestamp: timestamp,
+        authorName: authorName, // ✅ CORREÇÃO: Salva no campo 'authorName'
+        data: data,
+        originalCollection: collectionId,
+        originalDocId: docId
+    };
+
+    // 4. Mapeia os dados específicos da coleção
+    try {
+        switch (collectionId) {
+            case "historico_doses":
+                const medName = await getMedicationName(db, dependentId, data.medicamentoId);
+                const statusText = (data.status === "TAKEN") ? "Tomada" : (data.status === "SKIPPED" ? "Pulada" : "Registrada");
+                
+                let doseDescription = data.notas || "";
+                if (!doseDescription.trim()) { 
+                     doseDescription = `Dose de ${data.quantidadeAdministrada || medName} ${statusText.toLowerCase()}.`;
+                }
+
+                return {
+                    ...eventBase,
+                    type: "DOSE",
+                    title: `Dose ${statusText.toLowerCase()}: ${medName}`,
+                    description: doseDescription,
+                    icon: "ic_dose",
+                };
+            
+            case "health_notes":
+                const noteTitle = data.type.charAt(0).toUpperCase() + data.type.slice(1).toLowerCase();
+                const noteValues = Object.entries(data.values).map(([key, value]) => `${key}: ${value}`).join(', ');
+                return {
+                    ...eventBase,
+                    type: "NOTE",
+                    title: `Anotação de ${noteTitle}`,
+                    description: noteValues || "Anotação rápida registrada.",
+                    icon: "ic_note",
+                };
+
+            case "atividades":
+                let cleanDescription = data.descricao || "Atividade registrada.";
+                if (data.autorNome && cleanDescription.startsWith(data.autorNome)) {
+                    cleanDescription = cleanDescription.substring(data.autorNome.length).trim();
+                    cleanDescription = cleanDescription.charAt(0).toUpperCase() + cleanDescription.slice(1);
+                }
+                
+                return {
+                    ...eventBase,
+                    type: "ACTIVITY",
+                    title: "Atividade de Cuidado",
+                    description: cleanDescription, 
+                    icon: "ic_activity_log",
+                };
+
+            case "insights":
+                return {
+                    ...eventBase,
+                    type: "INSIGHT",
+                    title: `Novo Insight: ${data.title}`,
+                    description: data.description,
+                    icon: "ic_ai_analysis",
+                    authorName: "Nidus AI", // Sobrescreve o autor
+                };
+            
+            case "hidratacao":
+                return {
+                    ...eventBase,
+                    type: "WELLBEING",
+                    title: "Hidratação",
+                    description: `Consumo de ${data.quantidadeMl}ml de água.`,
+                    icon: "ic_water_drop",
+                };
+
+            case "atividades_fisicas":
+                return {
+                    ...eventBase,
+                    type: "WELLBEING",
+                    title: "Atividade Física",
+                    description: `${data.duracaoMinutos} min de ${data.tipo}.`,
+                    icon: "ic_fitness",
+                };
+
+            case "refeicoes":
+                const calories = data.calorias ? ` (~${data.calorias} kcal)` : "";
+                const mealType = data.tipo ? (data.tipo.charAt(0).toUpperCase() + data.tipo.slice(1).toLowerCase().replace("_", " ")) : "Refeição";
+                return {
+                    ...eventBase,
+                    type: "WELLBEING",
+                    title: `Refeição: ${mealType}`,
+                    description: `${data.descricao}${calories}`,
+                    icon: "ic_meal",
+                };
+
+            case "sono_registros":
+                let durationString = "";
+                try {
+                    const start = new Date(`1970-01-01T${data.horaDeDormir}Z`);
+                    const end = new Date(`1970-01-01T${data.horaDeAcordar}Z`);
+                    let diff = end.getTime() - start.getTime();
+                    if (diff < 0) diff += 24 * 60 * 60 * 1000;
+                    const hours = Math.floor(diff / (1000 * 60 * 60));
+                    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                    durationString = `${hours}h ${minutes}m de sono.`;
+                } catch(e) {}
+                
+                return {
+                    ...eventBase,
+                    type: "WELLBEING",
+                    title: "Registro de Sono",
+                    description: `${durationString} Qualidade: ${data.qualidade.toLowerCase()}.`,
+                    icon: "ic_sleep",
+                };
+
+            default:
+                logger.warn(`[Timeline] Coleção não mapeada: ${collectionId}`);
+                return null;
+        }
+    } catch (error) {
+        logger.error(`[Timeline] Erro ao criar evento para ${collectionId}/${docId}:`, error);
+        return null;
+    }
+}
+
 
 // (A função handlePlaySubscriptionNotification que estava faltando está aqui)
 exports.handlePlaySubscriptionNotification = onMessagePublished(
@@ -1390,90 +1594,6 @@ exports.handlePlaySubscriptionNotification = onMessagePublished(
     }
 );
 
-// (A função verifyExpiredSubscriptions que estava faltando está aqui)
-exports.verifyExpiredSubscriptions = onSchedule({
-    schedule: "every day 18:00",
-    timeZone: "America/Sao_Paulo",
-    minInstances: 0
-}, async (event) => {
-    await initGooglePlayPublisher();
-
-    logger.log("Iniciando verificação diária de status de assinaturas...");
-    const db = admin.firestore();
-
-    try {
-        const premiumUsersQuery = await db.collection("users")
-            .where("premium", "==", true)
-            .get();
-
-        if (premiumUsersQuery.empty) {
-            logger.log("Nenhum usuário premium para verificar. Trabalho concluído.");
-            return;
-        }
-
-        logger.info(`Encontrados ${premiumUsersQuery.size} usuários premium para verificar.`);
-        const batch = db.batch();
-        let usersToDeactivate = 0;
-
-        for (const userDoc of premiumUsersQuery.docs) {
-            const userId = userDoc.id;
-            const userData = userDoc.data();
-            
-            const purchasesSnapshot = await db.collection("users").doc(userId).collection("purchases").limit(1).get();
-            
-            if (purchasesSnapshot.empty) {
-                logger.warn(`Usuário ${userId} é premium mas não tem documento de compra. Revertendo para não-premium.`);
-                batch.update(userDoc.ref, { premium: false, familyId: null });
-                usersToDeactivate++;
-                continue;
-            }
-            
-            const purchaseToken = purchasesSnapshot.docs[0].data()?.purchaseToken;
-
-            if (!purchaseToken) {
-                logger.warn(`Documento de compra para o usuário ${userId} não tem purchaseToken. Revertendo.`);
-                batch.update(userDoc.ref, { premium: false, familyId: null });
-                usersToDeactivate++;
-                continue;
-            }
-
-            try {
-                const subscriptionResponse = await publisher.purchases.subscriptionsv2.get({
-                    packageName: ANDROID_PACKAGE_NAME,
-                    token: purchaseToken,
-                });
-                
-                const subscriptionState = subscriptionResponse.data.subscriptionState;
-                const isStillActive = subscriptionState === "SUBSCRIPTION_STATE_ACTIVE";
-
-                if (!isStillActive) {
-                    logger.info(`Assinatura do usuário ${userId} expirou (Status API: ${subscriptionState}). Agendando desativação.`);
-                    batch.update(userDoc.ref, { premium: false, familyId: null });
-                    usersToDeactivate++;
-                }
-
-            } catch (apiError) {
-                if (apiError.code === 410 || apiError.code === 404) {
-                     logger.warn(`Assinatura para o token ${purchaseToken} (usuário ${userId}) não foi encontrada na API. Desativando premium.`);
-                     batch.update(userDoc.ref, { premium: false, familyId: null });
-                     usersToDeactivate++;
-                } else {
-                    logger.error(`Erro ao consultar a API do Google Play para o usuário ${userId}:`, apiError.message);
-                }
-            }
-        }
-
-        if (usersToDeactivate > 0) {
-            await batch.commit();
-            logger.info(`${usersToDeactivate} usuários foram atualizados para premium: false.`);
-        } else {
-            logger.log("Nenhuma alteração de status necessária para os usuários premium verificados.");
-        }
-
-    } catch (error) {
-        logger.error("Erro catastrófico ao verificar e corrigir assinaturas expiradas:", error);
-    }
-});
 
 exports.checkLowStock = onDocumentUpdated({
     document: "dependentes/{dependentId}/medicamentos/{medicamentoId}",
@@ -1604,7 +1724,7 @@ exports.checkMissedDoses = onSchedule({
 
 
 exports.checkUpcomingSchedules = onSchedule({
-    schedule: "every day 05:00",
+    schedule: "every day 09:00",
     timeZone: "America/Sao_Paulo",
     minInstances: 0
 }, async (event) => {

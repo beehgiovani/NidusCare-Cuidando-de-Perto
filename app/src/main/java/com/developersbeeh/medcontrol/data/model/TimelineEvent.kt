@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/data/model/TimelineEvent.kt
 package com.developersbeeh.medcontrol.data.model
 
 import com.google.firebase.Timestamp
@@ -13,11 +12,12 @@ data class TimelineEvent(
     @ServerTimestamp
     @get:PropertyName("timestamp") @set:PropertyName("timestamp") var timestamp: Timestamp? = null,
     @get:PropertyName("description") @set:PropertyName("description") var description: String = "",
-    @get:PropertyName("author") @set:PropertyName("author") var author: String = "",
+
+    // ✅ CORREÇÃO: Este é o campo que o 'createTimelineEvent' popula
+    @get:PropertyName("authorName") @set:PropertyName("authorName") var authorName: String = "",
+
     @get:PropertyName("icon") @set:PropertyName("icon") var icon: String = "default",
     @get:PropertyName("type") @set:PropertyName("type") var type: String = "GENERIC",
-
-    // ✅ CAMPOS ADICIONADOS PARA CORRESPONDER AO BACKEND
     @get:PropertyName("originalCollection") @set:PropertyName("originalCollection") var originalCollection: String = "",
     @get:PropertyName("originalDocId") @set:PropertyName("originalDocId") var originalDocId: String = ""
 ) {

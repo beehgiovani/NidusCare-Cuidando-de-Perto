@@ -1,14 +1,16 @@
 package com.developersbeeh.medcontrol.ui.cycletracker
 
+import android.app.Application
 import android.util.Log
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.asLiveData
 import androidx.lifecycle.viewModelScope
+import com.developersbeeh.medcontrol.R
 import com.developersbeeh.medcontrol.data.model.DailyCycleLog
 import com.developersbeeh.medcontrol.data.model.FlowIntensity
-import com.developersbeeh.medcontrol.data.model.CycleSummary // <-- IMPORT ADICIONADO
+import com.developersbeeh.medcontrol.data.model.CycleSummary
 import com.developersbeeh.medcontrol.data.repository.CycleRepository
 import com.developersbeeh.medcontrol.util.Event
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -34,14 +36,15 @@ data class CycleUiState(
     val periodDays: Set<LocalDate> = emptySet(),
     val predictedPeriodDays: Set<LocalDate> = emptySet(),
     val fertileWindowDays: Set<LocalDate> = emptySet(),
-    val predictionText: String = "Carregando dados...",
+    val predictionText: String, // ✅ REATORADO: Removido valor padrão
     val currentPhase: String = ""
 )
 
 @HiltViewModel
 class CycleTrackerViewModel @Inject constructor(
-    private val cycleRepository: CycleRepository
-) : ViewModel() {
+    private val cycleRepository: CycleRepository,
+    private val application: Application // ✅ REATORADO: Injetado Application
+) : AndroidViewModel(application) { // ✅ REATORADO: Herda de AndroidViewModel
 
     private val _dependentId = MutableStateFlow<String?>(null)
     private var allDailyLogs: Map<LocalDate, DailyCycleLog> = emptyMap()
@@ -49,9 +52,6 @@ class CycleTrackerViewModel @Inject constructor(
     private val _actionFeedback = MutableLiveData<Event<String>>()
     val actionFeedback: LiveData<Event<String>> = _actionFeedback
 
-    // ==================================================
-    // ===== LIVE DATA PARA O HISTÓRICO ADICIONADO =====
-    // ==================================================
     private val _cycleHistory = MutableLiveData<List<CycleSummary>>()
     val cycleHistory: LiveData<List<CycleSummary>> = _cycleHistory
 
@@ -65,11 +65,7 @@ class CycleTrackerViewModel @Inject constructor(
             .map { logs ->
                 Log.d("CycleTrackerVM", "🔄 Novos dados recebidos do Firestore. Total de logs: ${logs.size}")
                 allDailyLogs = logs.associateBy { it.getDate() }
-
-                // Agora também processamos o histórico aqui
                 processCycleHistory(allDailyLogs.values.toList())
-
-                // A função original continua a mesma
                 processCyclesToState()
             }
     }.asLiveData()
@@ -98,22 +94,25 @@ class CycleTrackerViewModel @Inject constructor(
             }
         } ?: emptySet()
 
+        // ✅ REATORADO: Textos de previsão agora usam strings.xml
         val predictionText = prediction.nextPeriodDate?.let {
             val daysUntil = ChronoUnit.DAYS.between(LocalDate.now(), it)
             when {
-                daysUntil < 0 -> "A menstruação está atrasada."
-                daysUntil == 0L -> "A menstruação deve começar hoje."
-                daysUntil == 1L -> "A menstruação deve começar amanhã."
-                else -> "Próxima menstruação em $daysUntil dias."
+                daysUntil < 0 -> application.getString(R.string.cycle_vm_prediction_delayed)
+                daysUntil == 0L -> application.getString(R.string.cycle_vm_prediction_today)
+                daysUntil == 1L -> application.getString(R.string.cycle_vm_prediction_tomorrow)
+                else -> application.getString(R.string.cycle_vm_prediction_in_x_days, daysUntil)
             }
-        } ?: "São necessários pelo menos 2 ciclos completos para prever."
+        } ?: application.getString(R.string.cycle_vm_prediction_insufficient_data)
 
+        // ✅ REATORADO: Textos de fase agora usam strings.xml
         val today = LocalDate.now()
         val currentPhase = when {
-            periodDays.contains(today) -> "Fase Menstrual"
-            fertileWindowDays.contains(today) -> "Janela Fértil"
-            prediction.nextPeriodDate != null && prediction.fertileWindowEnd != null && today.isAfter(prediction.fertileWindowEnd) -> "Fase Lútea (TPM)"
-            else -> "Fase Folicular"
+            periodDays.contains(today) -> application.getString(R.string.cycle_vm_phase_menstrual)
+            fertileWindowDays.contains(today) -> application.getString(R.string.cycle_vm_phase_fertile)
+            prediction.nextPeriodDate != null && prediction.fertileWindowEnd != null && today.isAfter(prediction.fertileWindowEnd) ->
+                application.getString(R.string.cycle_vm_phase_luteal)
+            else -> application.getString(R.string.cycle_vm_phase_follicular)
         }
 
         Log.d("CycleTrackerVM", "✅ UI State processado. Período: ${periodDays.size} dias.")
@@ -126,9 +125,6 @@ class CycleTrackerViewModel @Inject constructor(
         )
     }
 
-    // ========================================================
-    // ===== NOVA FUNÇÃO PARA PROCESSAR O HISTÓRICO AQUI =====
-    // ========================================================
     private fun processCycleHistory(logs: List<DailyCycleLog>) {
         val (completedCycles, _) = findCycles(logs)
         if (completedCycles.size < 2) {
@@ -151,8 +147,6 @@ class CycleTrackerViewModel @Inject constructor(
                 periodLength = periodLength
             )
         }
-
-        // Posta a lista de sumários (em ordem reversa, do mais recente para o mais antigo)
         _cycleHistory.postValue(summaries.reversed())
         Log.d("CycleTrackerVM", "📊 Histórico de ciclos processado. Total: ${summaries.size} ciclos completos.")
     }
@@ -170,14 +164,14 @@ class CycleTrackerViewModel @Inject constructor(
     fun saveDailyLog(log: DailyCycleLog) {
         val currentId = _dependentId.value
         if (currentId.isNullOrBlank()) {
-            _actionFeedback.postValue(Event("Erro: ID do dependente não definido."))
+            _actionFeedback.postValue(Event(application.getString(R.string.cycle_vm_error_no_id)))
             return
         }
         viewModelScope.launch {
             cycleRepository.saveOrUpdateDailyLog(currentId, log).onSuccess {
-                _actionFeedback.postValue(Event("Registro de ${log.getDate().format(DateTimeFormatter.ofPattern("dd/MM"))} salvo!"))
+                _actionFeedback.postValue(Event(application.getString(R.string.cycle_vm_log_saved, log.getDate().format(DateTimeFormatter.ofPattern("dd/MM")))))
             }.onFailure {
-                _actionFeedback.postValue(Event("Erro ao salvar o registro."))
+                _actionFeedback.postValue(Event(application.getString(R.string.cycle_vm_log_save_error)))
             }
         }
     }
@@ -194,7 +188,6 @@ class CycleTrackerViewModel @Inject constructor(
                 currentCycle = mutableListOf(log)
             } else {
                 val lastDay = currentCycle.last().getDate()
-                // Considera um novo ciclo se o intervalo entre sangramentos for maior que 10 dias (mais robusto)
                 if (ChronoUnit.DAYS.between(lastDay, log.getDate()) > 10) {
                     cycles.add(currentCycle)
                     currentCycle = mutableListOf(log)
@@ -204,12 +197,7 @@ class CycleTrackerViewModel @Inject constructor(
             }
         }
 
-        // Adiciona o último ciclo à lista, seja ele completo ou em andamento
         currentCycle?.let { cycles.add(it) }
-
-        // A lógica de ciclo ativo foi removida daqui para simplificar e focar no histórico
-        // A função agora retorna todos os "períodos" identificados.
-        // A distinção entre completo e em andamento será feita por quem chama a função.
         return Pair(cycles, null)
     }
 

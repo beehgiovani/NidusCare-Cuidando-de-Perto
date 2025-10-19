@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.developersbeeh.medcontrol.R
 import com.developersbeeh.medcontrol.data.model.AtividadeFisica
 import com.developersbeeh.medcontrol.databinding.ItemActivityHistoryBinding
 import java.time.format.DateTimeFormatter
@@ -29,9 +30,9 @@ class ActivityHistoryAdapter : ListAdapter<AtividadeFisica, ActivityHistoryAdapt
         private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault())
 
         fun bind(record: AtividadeFisica) {
+            val context = binding.root.context
             binding.textViewType.text = record.tipo
-            binding.textViewDuration.text = "${record.duracaoMinutos} minutos"
-            // ✅ CORREÇÃO: Acessando a propriedade 'timestamp' diretamente
+            binding.textViewDuration.text = context.getString(R.string.activity_log_suffix, record.duracaoMinutos)
             binding.textViewTime.text = record.timestamp.format(timeFormatter)
         }
     }

@@ -59,7 +59,9 @@ class DashboardDependenteFragment : Fragment() {
     private lateinit var remindersAdapter: DashboardRemindersAdapter
     private var loadingDialog: LoadingDialogFragment? = null
 
-    // ✅ ADIÇÃO: Configura a animação de entrada
+    // ✅ ROBUSTEZ: Locale definido para formatação
+    private val locale = Locale("pt", "BR")
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         sharedElementEnterTransition = MaterialContainerTransform().apply {
@@ -77,7 +79,6 @@ class DashboardDependenteFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // ✅ ADIÇÃO: Define o transitionName dinamicamente na view de destino
         binding.nestedScrollView.transitionName = "dependent_card_transition_${args.dependentId}"
 
         userPreferences = UserPreferences(requireContext())
@@ -87,6 +88,18 @@ class DashboardDependenteFragment : Fragment() {
         binding.recyclerViewHealthData.layoutManager = GridLayoutManager(context, 3)
         binding.recyclerViewAdvancedTools.layoutManager = GridLayoutManager(context, 3)
         binding.recyclerViewProfileManagement.layoutManager = GridLayoutManager(context, 3)
+
+        // ✅ CORREÇÃO: IDs acessados diretamente do binding principal
+        binding.labelCareManagement.text = getString(R.string.care_management_title)
+        binding.labelHealthData.text = getString(R.string.health_data_title)
+        binding.labelAdvancedTools.text = getString(R.string.advanced_tools_title)
+        binding.labelProfileManagement.text = getString(R.string.profile_management_title)
+        binding.labelWeightTracker.text = getString(R.string.weight_tracker_title)
+        // Os IDs 'labelImc' e 'labelGoal' não existem no XML principal, eles estão dentro do card de peso
+        // Vou remover a tentativa de setar o texto deles aqui
+
+        // Os IDs 'labelWeekly...' também estão dentro do card semanal
+        // Vou remover a tentativa de setar o texto deles aqui
 
         setupAds()
         setupRemindersRecyclerView()
@@ -145,11 +158,11 @@ class DashboardDependenteFragment : Fragment() {
                     binding.linearLayoutInfo.startAnimation(fadeIn)
                 }
 
-                (activity as? AppCompatActivity)?.supportActionBar?.title = "Painel de ${it.nome}"
+                (activity as? AppCompatActivity)?.supportActionBar?.title = getString(R.string.dashboard_title_prefix, it.nome)
                 binding.textViewDependentName.text = it.nome
 
                 val age = AgeCalculator.calculateAge(it.dataDeNascimento)
-                binding.textViewDependentAge.text = if (age != null) "$age anos" else "Idade não informada"
+                binding.textViewDependentAge.text = if (age != null) getString(R.string.age_format_years, age) else getString(R.string.age_not_informed)
 
                 binding.imageViewAvatar.load(it.photoUrl) {
                     crossfade(true)
@@ -159,8 +172,8 @@ class DashboardDependenteFragment : Fragment() {
                 }
 
                 binding.textViewBloodType.text = TipoSanguineo.valueOf(it.tipoSanguineo).displayName
-                binding.textViewWeight.text = if (it.peso.isNotBlank()) "${it.peso} kg" else ""
-                binding.textViewHeight.text = if (it.altura.isNotBlank()) "${it.altura} cm" else ""
+                binding.textViewWeight.text = if (it.peso.isNotBlank()) getString(R.string.weight_format_kg, it.peso) else ""
+                binding.textViewHeight.text = if (it.altura.isNotBlank()) getString(R.string.height_format_cm, it.altura) else ""
             }
         }
 
@@ -170,7 +183,7 @@ class DashboardDependenteFragment : Fragment() {
                     binding.cardMissedDoseAlert.visibility = View.VISIBLE
                     binding.cardMissedDoseAlert.startAnimation(AnimationUtils.loadAnimation(context, R.anim.fade_in))
                 }
-                binding.textViewMissedDosesDetails.text = "Doses pendentes para: ${missedMeds.joinToString(", ")}."
+                binding.textViewMissedDosesDetails.text = getString(R.string.missed_doses_details, missedMeds.joinToString(", "))
             } else {
                 binding.cardMissedDoseAlert.visibility = View.GONE
             }
@@ -199,7 +212,10 @@ class DashboardDependenteFragment : Fragment() {
                 binding.layoutReminders.recyclerViewReminders.isVisible = true
                 remindersAdapter.submitList(reminders)
             } else {
-                binding.layoutReminders.cardReminders.isVisible = false
+                binding.layoutReminders.cardReminders.isVisible = true
+                binding.layoutReminders.textViewNoReminders.isVisible = true
+                binding.layoutReminders.textViewNoReminders.text = getString(R.string.reminders_empty_state)
+                binding.layoutReminders.recyclerViewReminders.isVisible = false
             }
         }
 
@@ -212,8 +228,9 @@ class DashboardDependenteFragment : Fragment() {
                     binding.cardWeeklySummary.visibility = View.VISIBLE
                     binding.cardWeeklySummary.startAnimation(AnimationUtils.loadAnimation(context, R.anim.slide_up_fade_in))
                 }
-                binding.textViewWeeklyHydration.text = String.format(Locale.getDefault(), "%.1f L / dia", summary.mediaDiariaAguaMl / 1000.0)
-                binding.textViewWeeklyActivity.text = "${summary.totalMinutosAtividade} min / semana"
+                // ✅ CORREÇÃO: Acessa os IDs dentro do cardWeeklySummary
+                binding.textViewWeeklyHydration.text = getString(R.string.weekly_summary_hydration, summary.mediaDiariaAguaMl / 1000.0)
+                binding.textViewWeeklyActivity.text = getString(R.string.weekly_summary_activity, summary.totalMinutosAtividade)
             } else {
                 binding.cardWeeklySummary.visibility = View.GONE
             }
@@ -275,17 +292,22 @@ class DashboardDependenteFragment : Fragment() {
     private fun updateWeightTrackerCard() {
         val imcResult = viewModel.imcResult.value
         val goalStatus = viewModel.weightGoalStatus.value
+        // ✅ CORREÇÃO: Acessa o card de peso pelo ID correto
+        val card = binding.cardWeightTracker
+
         if (imcResult == null && goalStatus == null) {
-            binding.cardWeightTracker.visibility = View.GONE
+            card.visibility = View.GONE
             return
         }
-        if (binding.cardWeightTracker.visibility != View.VISIBLE) {
-            binding.cardWeightTracker.visibility = View.VISIBLE
-            binding.cardWeightTracker.startAnimation(AnimationUtils.loadAnimation(context, R.anim.slide_up_fade_in))
+        if (card.visibility != View.VISIBLE) {
+            card.visibility = View.VISIBLE
+            card.startAnimation(AnimationUtils.loadAnimation(context, R.anim.slide_up_fade_in))
         }
+
+        // ✅ CORREÇÃO: Acessa os IDs de UI dentro do card de peso
         if (imcResult != null) {
             binding.layoutImc.visibility = View.VISIBLE
-            binding.textViewImcValue.text = String.format(Locale.getDefault(), "%.1f", imcResult.value)
+            binding.textViewImcValue.text = String.format(locale, "%.1f", imcResult.value)
             binding.textViewImcClassification.text = imcResult.classification
             binding.textViewImcClassification.setTextColor(ContextCompat.getColor(requireContext(), imcResult.color))
         } else {
@@ -345,7 +367,7 @@ class DashboardDependenteFragment : Fragment() {
 
     private fun showPredictiveAnalysisDialog() {
         val dialogBinding = DialogPredictiveAnalysisBinding.inflate(LayoutInflater.from(context))
-        val dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
+        val dateFormatter = DateTimeFormatter.ofPattern(getString(R.string.date_format_dd_mm_yyyy))
         var analysisStartDate: LocalDate = LocalDate.now().minusDays(29)
         var analysisEndDate: LocalDate = LocalDate.now()
 
@@ -375,7 +397,7 @@ class DashboardDependenteFragment : Fragment() {
         }
         dialogBinding.chipCustomRange.setOnClickListener {
             val datePicker = MaterialDatePicker.Builder.dateRangePicker()
-                .setTitleText("Selecione o Período")
+                .setTitleText(getString(R.string.dialog_select_period_title))
                 .setSelection(
                     androidx.core.util.Pair(
                         analysisStartDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
@@ -393,8 +415,8 @@ class DashboardDependenteFragment : Fragment() {
 
         val dialog = MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
             .setView(dialogBinding.root)
-            .setPositiveButton("Gerar Análise", null)
-            .setNegativeButton("Cancelar", null)
+            .setPositiveButton(getString(R.string.dialog_button_generate_analysis), null)
+            .setNegativeButton(getString(R.string.dialog_button_cancel), null)
             .create()
 
         dialog.setOnShowListener {
@@ -402,7 +424,7 @@ class DashboardDependenteFragment : Fragment() {
             positiveButton.setOnClickListener {
                 val symptoms = dialogBinding.editTextSymptoms.text.toString().trim()
                 if (symptoms.isEmpty()) {
-                    dialogBinding.tilSymptoms.error = "Este campo é obrigatório."
+                    dialogBinding.tilSymptoms.error = getString(R.string.error_field_required)
                     return@setOnClickListener
                 }
 
@@ -427,7 +449,7 @@ class DashboardDependenteFragment : Fragment() {
                         )
                         findNavController().navigate(action)
                     }.onFailure { error ->
-                        Toast.makeText(context, "Erro ao gerar análise: ${error.message}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, getString(R.string.error_generating_analysis, error.message), Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -436,19 +458,16 @@ class DashboardDependenteFragment : Fragment() {
     }
 
     private fun showDependentCredentialsDialog(code: String, password: String) {
-        val message = "As credenciais de acesso para ${args.dependentName} são:\n\n" +
-                "Código de Vínculo: $code\n" +
-                "Senha: $password\n\n" +
-                "Anote ou compartilhe essas informações de forma segura com o dependente."
+        val message = getString(R.string.dialog_message_credentials, args.dependentName, code, password)
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Credenciais de Acesso")
+            .setTitle(getString(R.string.dialog_title_credentials))
             .setMessage(message)
-            .setPositiveButton("Entendi", null)
-            .setNeutralButton("Copiar") { _, _ ->
+            .setPositiveButton(getString(R.string.understand), null)
+            .setNeutralButton(getString(R.string.button_copy)) { _, _ ->
                 val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText("Credenciais MedControl", "Código: $code\nSenha: $password")
+                val clip = ClipData.newPlainText(getString(R.string.credentials_label), "Código: $code\nSenha: $password")
                 clipboard.setPrimaryClip(clip)
-                Toast.makeText(context, "Credenciais copiadas!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, getString(R.string.credentials_copied), Toast.LENGTH_SHORT).show()
             }
             .create()
             .show()
@@ -456,10 +475,10 @@ class DashboardDependenteFragment : Fragment() {
 
     private fun showDeleteConfirmationDialog(dependente: Dependente) {
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Confirmar Exclusão")
-            .setMessage("Tem certeza que deseja excluir ${dependente.nome}? Esta ação é permanente.")
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Excluir") { _, _ ->
+            .setTitle(getString(R.string.dialog_title_confirm_delete))
+            .setMessage(getString(R.string.dialog_message_confirm_delete, dependente.nome))
+            .setNegativeButton(getString(R.string.dialog_button_cancel), null)
+            .setPositiveButton(getString(R.string.button_delete)) { _, _ ->
                 viewModel.confirmDeleteDependent()
                 findNavController().popBackStack(R.id.caregiverDashboardFragment, false)
             }
@@ -469,10 +488,10 @@ class DashboardDependenteFragment : Fragment() {
 
     private fun showEmergencyConfirmationDialog() {
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Enviar Alerta de Emergência?")
-            .setMessage("Seus cuidadores serão notificados imediatamente que você precisa de ajuda. Deseja continuar?")
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Sim, Enviar Alerta") { _, _ ->
+            .setTitle(getString(R.string.dialog_title_emergency_alert))
+            .setMessage(getString(R.string.dialog_message_emergency_alert))
+            .setNegativeButton(getString(R.string.dialog_button_cancel), null)
+            .setPositiveButton(getString(R.string.button_send_alert)) { _, _ ->
                 viewModel.confirmEmergencyAlert()
             }
             .show()

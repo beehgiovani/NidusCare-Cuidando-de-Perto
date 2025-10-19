@@ -26,6 +26,7 @@ import kotlinx.coroutines.tasks.await
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Date
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -163,13 +164,15 @@ class FirestoreRepository @Inject constructor(
             .collection("timeline")
             .orderBy("timestamp", Query.Direction.DESCENDING)
 
-        // ✅ CORREÇÃO: Aplica o filtro na query do Firestore
+        // ✅ CORREÇÃO: Adicionado o filtro WELLBEING
         when (filter) {
             TimelineFilter.DOSE -> query = query.whereEqualTo("type", "DOSE")
             TimelineFilter.NOTE -> query = query.whereEqualTo("type", "NOTE")
             TimelineFilter.ACTIVITY -> query = query.whereEqualTo("type", "ACTIVITY")
             TimelineFilter.INSIGHT -> query = query.whereEqualTo("type", "INSIGHT")
+            TimelineFilter.WELLBEING -> query = query.whereEqualTo("type", "WELLBEING") // <-- ADICIONADO
             TimelineFilter.ALL -> { /* Não aplica filtro adicional */ }
+            // O 'else' não é necessário se o 'when' cobrir todos os casos do enum.
         }
 
         return Pager(
@@ -658,17 +661,12 @@ class FirestoreRepository @Inject constructor(
             return@callbackFlow
         }
 
-        val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
-        val endOfDay = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
-
-        val startTimestamp = Timestamp(Date.from(startOfDay))
-        val endTimestamp = Timestamp(Date.from(endOfDay))
+        val dateQueryString = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
 
         val listener = db.collection("dependentes").document(dependentId)
             .collection("hidratacao")
-            .whereGreaterThanOrEqualTo("timestampString", startOfDay.toString())
-            .whereLessThan("timestampString", endOfDay.toString())
-            .orderBy("timestampString", Query.Direction.DESCENDING)
+            .whereEqualTo("dateString", dateQueryString) // Filtra pelo dia exato
+            .orderBy("timestampString", Query.Direction.DESCENDING) // Ordena pela hora
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     close(error)
@@ -686,7 +684,7 @@ class FirestoreRepository @Inject constructor(
             db.collection("dependentes").document(dependentId)
                 .collection("atividades_fisicas")
                 .document(atividade.id)
-                .set(atividade)
+                .set(atividade) // Agora 'atividade' contém o 'dateString'
                 .await()
             Result.success(Unit)
         } catch (e: Exception) {
@@ -701,17 +699,12 @@ class FirestoreRepository @Inject constructor(
             return@callbackFlow
         }
 
-        val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
-        val endOfDay = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
-
-        val startTimestamp = Timestamp(Date.from(startOfDay))
-        val endTimestamp = Timestamp(Date.from(endOfDay))
+        val dateQueryString = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
 
         val listener = db.collection("dependentes").document(dependentId)
             .collection("atividades_fisicas")
-            .whereGreaterThanOrEqualTo("timestampString", startOfDay.toString())
-            .whereLessThan("timestampString", endOfDay.toString())
-            .orderBy("timestampString", Query.Direction.DESCENDING)
+            .whereEqualTo("dateString", dateQueryString) // Filtra pelo dia exato
+            .orderBy("timestampString", Query.Direction.DESCENDING) // Ordena pela hora
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     close(error)
@@ -729,7 +722,7 @@ class FirestoreRepository @Inject constructor(
             db.collection("dependentes").document(dependentId)
                 .collection("refeicoes")
                 .document(refeicao.id)
-                .set(refeicao)
+                .set(refeicao) // Agora 'refeicao' contém o 'dateString'
                 .await()
             Result.success(Unit)
         } catch (e: Exception) {
@@ -744,17 +737,12 @@ class FirestoreRepository @Inject constructor(
             return@callbackFlow
         }
 
-        val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant()
-        val endOfDay = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
-
-        val startTimestamp = Timestamp(Date.from(startOfDay))
-        val endTimestamp = Timestamp(Date.from(endOfDay))
+        val dateQueryString = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
 
         val listener = db.collection("dependentes").document(dependentId)
             .collection("refeicoes")
-            .whereGreaterThanOrEqualTo("timestampString", startOfDay.toString())
-            .whereLessThan("timestampString", endOfDay.toString())
-            .orderBy("timestampString", Query.Direction.DESCENDING)
+            .whereEqualTo("dateString", dateQueryString) // Filtra pelo dia exato
+            .orderBy("timestampString", Query.Direction.DESCENDING) // Ordena pela hora
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     close(error)

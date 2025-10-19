@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/dashboard/DashboardRemindersAdapter.kt
 package com.developersbeeh.medcontrol.ui.dashboard
 
 import android.view.LayoutInflater

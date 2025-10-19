@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
@@ -45,6 +46,9 @@ class MealTrackerFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         viewModel.initialize(args.dependentId)
+
+        // ✅ REFATORADO: Seta o título da tela
+        (activity as? AppCompatActivity)?.supportActionBar?.title = getString(R.string.meal_history_title)
 
         binding.recyclerViewMealHistory.adapter = adapter
         binding.recyclerViewMealHistory.layoutManager = LinearLayoutManager(requireContext())
@@ -98,7 +102,7 @@ class MealTrackerFragment : Fragment() {
 
         val entries = ArrayList<BarEntry>()
         val xAxisLabels = ArrayList<String>()
-        val dayFormatter = DateTimeFormatter.ofPattern("dd/MM")
+        val dayFormatter = DateTimeFormatter.ofPattern(getString(R.string.date_format_dd_mm))
 
         for (i in 0..6) {
             val date = sevenDaysAgo.plusDays(i.toLong())
@@ -107,7 +111,7 @@ class MealTrackerFragment : Fragment() {
             xAxisLabels.add(date.format(dayFormatter))
         }
 
-        val dataSet = BarDataSet(entries, getString(R.string.chart_label_calories_kcal)).apply {
+        val dataSet = BarDataSet(entries, getString(R.string.meal_chart_label)).apply {
             color = ContextCompat.getColor(requireContext(), R.color.md_theme_primary)
             setDrawValues(false)
         }

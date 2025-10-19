@@ -1,11 +1,13 @@
 package com.developersbeeh.medcontrol.ui.timeline
 
 import android.view.LayoutInflater
+import android.view.View // Importar View
 import android.view.ViewGroup
 import androidx.core.content.ContextCompat
 import androidx.paging.PagingDataAdapter
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
+import com.developersbeeh.medcontrol.R
 import com.developersbeeh.medcontrol.databinding.ItemTimelineDateHeaderBinding
 import com.developersbeeh.medcontrol.databinding.ItemTimelineLogBinding
 import java.time.LocalDate
@@ -13,7 +15,6 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 
-// ✅ ALTERAÇÃO: Herda de PagingDataAdapter
 class TimelineAdapter : PagingDataAdapter<TimelineListItem, RecyclerView.ViewHolder>(DiffCallback()) {
 
     companion object {
@@ -49,17 +50,21 @@ class TimelineAdapter : PagingDataAdapter<TimelineListItem, RecyclerView.ViewHol
     }
 
     class DateHeaderViewHolder(private val binding: ItemTimelineDateHeaderBinding) : RecyclerView.ViewHolder(binding.root) {
-        private val dateFormatter = DateTimeFormatter.ofPattern("d 'de' MMMM", Locale("pt", "BR"))
+        private val locale = Locale("pt", "BR")
+        private val dateFormatter = DateTimeFormatter.ofPattern("d 'de' MMMM", locale)
+
         fun bind(header: TimelineListItem.HeaderItem) {
+            val context = binding.root.context
             val today = LocalDate.now()
             val yesterday = today.minusDays(1)
+
             val dateText = when (header.date) {
-                today -> "Hoje - ${header.date.format(dateFormatter)}"
-                yesterday -> "Ontem - ${header.date.format(dateFormatter)}"
+                today -> context.getString(R.string.timeline_header_today, header.date.format(dateFormatter))
+                yesterday -> context.getString(R.string.timeline_header_yesterday, header.date.format(dateFormatter))
                 else -> {
-                    val dayOfWeek = header.date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale("pt", "BR"))
+                    val dayOfWeek = header.date.dayOfWeek.getDisplayName(TextStyle.FULL, locale)
                         .replaceFirstChar { it.uppercase() }
-                    "$dayOfWeek - ${header.date.format(dateFormatter)}"
+                    context.getString(R.string.timeline_header_format, dayOfWeek, header.date.format(dateFormatter))
                 }
             }
             binding.textViewDate.text = dateText
@@ -68,13 +73,23 @@ class TimelineAdapter : PagingDataAdapter<TimelineListItem, RecyclerView.ViewHol
 
     class LogViewHolder(private val binding: ItemTimelineLogBinding) : RecyclerView.ViewHolder(binding.root) {
         private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
         fun bind(item: TimelineListItem.LogItem) {
+            val context = binding.root.context
             val log = item.log
             binding.textViewTime.text = log.timestamp.format(timeFormatter)
             binding.textViewDetails.text = log.description
-            binding.textViewAutor.text = "por ${log.author}"
+
+            // ✅ ESTA LÓGICA ESTÁ CORRETA e agora funcionará
+            binding.textViewAutor.visibility = View.VISIBLE
+            if (log.author.equals("Nidus AI", ignoreCase = true) || log.author.equals("Sistema", ignoreCase = true)) {
+                binding.textViewAutor.text = log.author
+            } else {
+                binding.textViewAutor.text = context.getString(R.string.timeline_author_prefix, log.author)
+            }
+
             binding.timelineIcon.setImageResource(log.iconRes)
-            binding.timelineIcon.setColorFilter(ContextCompat.getColor(binding.root.context, log.iconTintRes))
+            binding.timelineIcon.setColorFilter(ContextCompat.getColor(context, log.iconTintRes))
         }
     }
 

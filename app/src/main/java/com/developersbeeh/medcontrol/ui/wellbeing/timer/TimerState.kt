@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/wellbeing/timer/TimerState.kt
 package com.developersbeeh.medcontrol.ui.wellbeing.timer
 
 import kotlinx.coroutines.flow.MutableStateFlow

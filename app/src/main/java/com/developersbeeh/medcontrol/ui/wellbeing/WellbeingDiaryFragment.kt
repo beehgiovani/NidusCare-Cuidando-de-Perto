@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/wellbeing/WellbeingDiaryFragment.kt
 package com.developersbeeh.medcontrol.ui.wellbeing
 
 import android.annotation.SuppressLint
@@ -9,12 +8,14 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.Animation
 import android.view.animation.AnimationUtils
 import android.widget.ArrayAdapter
+import android.widget.RadioButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,12 +31,17 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
+import com.developersbeeh.medcontrol.BuildConfig
 import com.developersbeeh.medcontrol.NavGraphDirections
 import com.developersbeeh.medcontrol.R
 import com.developersbeeh.medcontrol.data.UserPreferences
+import com.developersbeeh.medcontrol.data.model.MealAnalysisResult
 import com.developersbeeh.medcontrol.data.model.QualidadeSono
 import com.developersbeeh.medcontrol.data.model.TipoRefeicao
 import com.developersbeeh.medcontrol.databinding.*
+import com.developersbeeh.medcontrol.ui.common.LoadingDialogFragment
+import com.developersbeeh.medcontrol.ui.sleep.getDisplayName
+import com.developersbeeh.medcontrol.ui.meals.getDisplayName
 import com.developersbeeh.medcontrol.ui.wellbeing.timer.ActivityTimerService
 import com.developersbeeh.medcontrol.ui.wellbeing.timer.TimerServiceManager
 import com.developersbeeh.medcontrol.ui.wellbeing.timer.TimerState
@@ -49,6 +55,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.IOException
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -66,6 +73,11 @@ class WellbeingDiaryFragment : Fragment() {
     private val args: WellbeingDiaryFragmentArgs by navArgs()
 
     private var tempImageUri: Uri? = null
+    private var mealDialog: AlertDialog? = null
+    private var sleepDialog: AlertDialog? = null
+
+    private var aiAnalysisResult: MealAnalysisResult? = null
+    private val locale = Locale("pt", "BR")
 
     private val takePictureLauncher = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success) {
@@ -87,7 +99,7 @@ class WellbeingDiaryFragment : Fragment() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == "ACTIVITY_TIMER_STOP_ACTION") {
                 val elapsedTimeMs = intent.getLongExtra("ELAPSED_TIME_MS", 0)
-                val activityType = intent.getStringExtra("ACTIVITY_TYPE") ?: "Atividade"
+                val activityType = intent.getStringExtra("ACTIVITY_TYPE") ?: getString(R.string.timer_default_activity_type)
                 val durationMinutes = TimeUnit.MILLISECONDS.toMinutes(elapsedTimeMs).toInt()
 
                 if (durationMinutes > 0) {
@@ -110,9 +122,11 @@ class WellbeingDiaryFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         viewModel.initialize(args.dependentId)
         userPreferences = UserPreferences(requireContext())
-        (activity as? AppCompatActivity)?.supportActionBar?.title = "Diário de Bem-Estar"
-        val dateFormatter = DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", Locale("pt", "BR"))
-        binding.textViewDate.text = "Hoje, ${LocalDate.now().format(dateFormatter).replaceFirstChar { it.uppercase() }}"
+        (activity as? AppCompatActivity)?.supportActionBar?.title = getString(R.string.wellbeing_diary_title)
+
+        // ✅ CORREÇÃO: O padrão com "Hoje," foi corrigido no strings.xml
+        val dateFormatter = DateTimeFormatter.ofPattern(getString(R.string.date_header_format), locale)
+        binding.textViewDate.text = LocalDate.now().format(dateFormatter).replaceFirstChar { it.uppercase() }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             requireActivity().registerReceiver(timerStopReceiver, IntentFilter("ACTIVITY_TIMER_STOP_ACTION"), Context.RECEIVER_NOT_EXPORTED)
@@ -145,7 +159,10 @@ class WellbeingDiaryFragment : Fragment() {
     }
 
     private fun setupListeners() {
-        // --- Ações de Navegação (clique no card inteiro) ---
+        binding.cardWeight.root.setOnClickListener {
+            val action = NavGraphDirections.actionGlobalToWeightTrackerFragment(args.dependentId)
+            findNavController().navigate(action)
+        }
         binding.cardHydration.root.setOnClickListener {
             val action = NavGraphDirections.actionGlobalToHydrationTrackerFragment(args.dependentId)
             findNavController().navigate(action)
@@ -162,12 +179,7 @@ class WellbeingDiaryFragment : Fragment() {
             val action = NavGraphDirections.actionGlobalToSleepTrackerFragment(args.dependentId)
             findNavController().navigate(action)
         }
-        binding.cardWeight.root.setOnClickListener {
-            val action = NavGraphDirections.actionGlobalToWeightTrackerFragment(args.dependentId)
-            findNavController().navigate(action)
-        }
 
-        // --- Ações de Botões (dentro dos cards) ---
         binding.cardWeight.buttonUpdateWeight.setOnClickListener { showUpdateWeightDialog() }
         binding.cardHydration.buttonAdd200ml.setOnClickListener { viewModel.addWaterIntake(200) }
         binding.cardHydration.buttonAdd500ml.setOnClickListener { viewModel.addWaterIntake(500) }
@@ -178,6 +190,14 @@ class WellbeingDiaryFragment : Fragment() {
         binding.cardMeal.buttonAddMeal.setOnClickListener { showAddMealDialog() }
         binding.cardMeal.buttonAnalyzeMeal.setOnClickListener { handleMealAnalysisClick() }
         binding.cardSleep.buttonAddEditSleep.setOnClickListener { showAddSleepDialog() }
+
+        binding.cardHydration.buttonAdd200ml.text = getString(R.string.hydration_add_200ml)
+        binding.cardHydration.buttonAdd500ml.text = getString(R.string.hydration_add_500ml)
+        binding.cardActivity.buttonStartActivity.text = getString(R.string.activity_start_timer)
+        binding.cardActivity.buttonAddActivityManually.text = getString(R.string.activity_add_manually)
+        binding.cardActivity.buttonStopTimer.text = getString(R.string.activity_timer_stop)
+        binding.cardMeal.buttonAddMeal.text = getString(R.string.meal_add)
+        binding.cardMeal.buttonAnalyzeMeal.text = getString(R.string.meal_analyze)
     }
 
     private fun observeViewModel() {
@@ -191,32 +211,36 @@ class WellbeingDiaryFragment : Fragment() {
             binding.cardHydration.root.isVisible = true
             animateTextViewUpdate(binding.cardHydration.textViewConsumed, "${state.hidratacaoTotalMl}")
             binding.cardHydration.progressBarWater.setProgressCompat(state.hidratacaoPorcentagem, true)
-            binding.cardHydration.textViewGoal.text = "Meta: ${state.hidratacaoMetaMl} ml"
+            binding.cardHydration.textViewGoal.text = getString(R.string.water_goal_format, state.hidratacaoMetaMl)
+            binding.cardHydration.labelHydration.text = getString(R.string.category_hydration)
 
             if (!binding.cardActivity.root.isVisible) binding.cardActivity.root.startAnimation(animation)
             binding.cardActivity.root.isVisible = true
             binding.cardActivity.progressBarActivity.setProgressCompat(state.atividadePorcentagem, true)
             animateTextViewUpdate(binding.cardActivity.textViewMinutes, "${state.atividadeTotalMin}")
-            binding.cardActivity.textViewActivityGoal.text = "Meta: ${state.atividadeMetaMin} min"
+            binding.cardActivity.textViewActivityGoal.text = getString(R.string.activity_goal_format, state.atividadeMetaMin)
+            binding.cardActivity.labelActivity.text = getString(R.string.category_activity)
 
             if (!binding.cardMeal.root.isVisible) binding.cardMeal.root.startAnimation(animation)
             binding.cardMeal.root.isVisible = true
             binding.cardMeal.progressCalories.setProgressCompat(state.caloriasPorcentagem, true)
-            animateTextViewUpdate(binding.cardMeal.textViewCaloriesProgress, "${state.caloriasTotal} / ${state.caloriasMeta} kcal")
+            animateTextViewUpdate(binding.cardMeal.textViewCaloriesProgress, getString(R.string.calories_progress_format, state.caloriasTotal, state.caloriasMeta))
+            binding.cardMeal.labelMeal.text = getString(R.string.category_meal)
 
             if (!binding.cardSleep.root.isVisible) binding.cardSleep.root.startAnimation(animation)
             binding.cardSleep.root.isVisible = true
             val registroSono = state.registroSono
             if (registroSono != null) {
                 animateTextViewUpdate(binding.cardSleep.textViewSleepDuration, "${state.sonoTotalHoras}h ${state.sonoTotalMinutos}m")
-                val qualidade = try { QualidadeSono.valueOf(registroSono.qualidade) } catch (e: Exception) { QualidadeSono.RAZOAVEL }
-                animateTextViewUpdate(binding.cardSleep.textViewSleepQuality, "Qualidade: ${qualidade.displayName}")
-                binding.cardSleep.buttonAddEditSleep.text = "Editar"
+                val qualidade = (try { QualidadeSono.valueOf(registroSono.qualidade) } catch (e: Exception) { QualidadeSono.RAZOAVEL }).getDisplayName(requireContext())
+                animateTextViewUpdate(binding.cardSleep.textViewSleepQuality, getString(R.string.sleep_quality_format, qualidade))
+                binding.cardSleep.buttonAddEditSleep.text = getString(R.string.sleep_button_edit)
             } else {
-                binding.cardSleep.textViewSleepDuration.text = "- h -- m"
-                binding.cardSleep.textViewSleepQuality.text = "Nenhum registro hoje"
-                binding.cardSleep.buttonAddEditSleep.text = "Registrar"
+                binding.cardSleep.textViewSleepDuration.text = getString(R.string.sleep_duration_empty)
+                binding.cardSleep.textViewSleepQuality.text = getString(R.string.sleep_no_record_today)
+                binding.cardSleep.buttonAddEditSleep.text = getString(R.string.sleep_button_register)
             }
+            binding.cardSleep.labelSleep.text = getString(R.string.category_sleep)
         }
 
         viewModel.actionFeedback.observe(viewLifecycleOwner) { event ->
@@ -225,31 +249,54 @@ class WellbeingDiaryFragment : Fragment() {
             }
         }
 
+        observeSleepSuggestion()
+    }
+
+    private fun observeSleepSuggestion() {
         viewModel.sleepSuggestionEvent.observe(viewLifecycleOwner) { event ->
-            event.getContentIfNotHandled()?.let {
-                Toast.makeText(context, "Horário sugerido preenchido!", Toast.LENGTH_SHORT).show()
+            if (sleepDialog != null && sleepDialog!!.isShowing) {
+                event.getContentIfNotHandled()?.let { (suggestedBedtime, suggestedWaketime) ->
+                    try {
+                        val rootView = sleepDialog!!.findViewById<View>(R.id.dialog_add_sleep_root)
+                        if (rootView != null) {
+                            val dialogBinding = DialogAddSleepBinding.bind(rootView)
+                            val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+                            dialogBinding.editTextBedtime.setText(suggestedBedtime.format(timeFormatter))
+                            dialogBinding.editTextWakeUp.setText(suggestedWaketime.format(timeFormatter))
+                            Toast.makeText(context, getString(R.string.feedback_sleep_suggestion_applied), Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Log.e("WellbeingDiaryFragment", "Erro ao tentar atualizar o diálogo de sono", e)
+                    }
+                }
             }
         }
     }
 
+
     private fun updateWeightCard(state: BemEstarUiState) {
         val animation = AnimationUtils.loadAnimation(context, R.anim.slide_up_fade_in)
         val dependent = state.dependente ?: return
+        val card = binding.cardWeight.root
 
         if (dependent.peso.isNotBlank()) {
-            if (!binding.cardWeight.root.isVisible) {
-                binding.cardWeight.root.startAnimation(animation)
-                binding.cardWeight.root.isVisible = true
+            if (!card.isVisible) {
+                card.startAnimation(animation)
+                card.isVisible = true
             }
             binding.cardWeight.textViewCurrentWeight.text = dependent.peso.replace(',', '.')
         } else {
-            binding.cardWeight.root.isVisible = false
+            card.isVisible = false
             return
         }
 
+        binding.cardWeight.labelWeight.text = getString(R.string.category_weight)
+        binding.cardWeight.textViewWeightUnit.text = getString(R.string.unit_kg)
+        binding.cardWeight.buttonUpdateWeight.text = getString(R.string.update)
+
         binding.cardWeight.layoutImc.isVisible = state.imcResult != null
         state.imcResult?.let {
-            binding.cardWeight.textViewImcValue.text = String.format(Locale.getDefault(), "%.1f", it.value)
+            binding.cardWeight.textViewImcValue.text = String.format(locale, "%.1f", it.value)
             binding.cardWeight.textViewImcClassification.text = it.classification
             binding.cardWeight.textViewImcClassification.setTextColor(ContextCompat.getColor(requireContext(), it.color))
         }
@@ -265,6 +312,8 @@ class WellbeingDiaryFragment : Fragment() {
         } ?: binding.cardWeight.buttonSetGoal.setOnClickListener {
             findNavController().navigate(NavGraphDirections.actionGlobalToHealthGoalsFragment(args.dependentId))
         }
+
+        binding.cardWeight.buttonSetGoal.text = getString(R.string.weight_goal_not_set)
     }
 
     private fun observeTimerState() {
@@ -324,12 +373,12 @@ class WellbeingDiaryFragment : Fragment() {
 
         when(state) {
             is TimerState.Running -> {
-                cardActivityBinding.buttonPauseTimer.text = "Pausar"
+                cardActivityBinding.buttonPauseTimer.text = getString(R.string.activity_timer_pause)
                 cardActivityBinding.buttonPauseTimer.setIconResource(R.drawable.ic_timer_pause)
                 cardActivityBinding.buttonPauseTimer.setOnClickListener { sendCommandToService(ActivityTimerService.ACTION_PAUSE) }
             }
             is TimerState.Paused -> {
-                cardActivityBinding.buttonPauseTimer.text = "Continuar"
+                cardActivityBinding.buttonPauseTimer.text = getString(R.string.activity_timer_resume)
                 cardActivityBinding.buttonPauseTimer.setIconResource(R.drawable.ic_play_arrow)
                 cardActivityBinding.buttonPauseTimer.setOnClickListener { sendCommandToService(ActivityTimerService.ACTION_START_RESUME) }
             }
@@ -342,13 +391,13 @@ class WellbeingDiaryFragment : Fragment() {
         val textInputLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.textInputLayout)
         val editText = dialogView.findViewById<TextInputEditText>(R.id.editTextSingleInput)
         editText.inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
-        textInputLayout.hint = "Novo Peso (kg)"
+        textInputLayout.hint = getString(R.string.dialog_hint_new_weight_kg)
         editText.setText(viewModel.uiState.value?.dependente?.peso ?: "")
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Atualizar Peso Atual")
+            .setTitle(getString(R.string.dialog_title_update_weight))
             .setView(dialogView)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Salvar") { _, _ ->
+            .setNegativeButton(getString(R.string.dialog_button_cancel), null)
+            .setPositiveButton(getString(R.string.dialog_button_save)) { _, _ ->
                 val newWeight = editText.text.toString().trim()
                 if (newWeight.isNotEmpty()) {
                     viewModel.updateWeight(newWeight)
@@ -359,20 +408,25 @@ class WellbeingDiaryFragment : Fragment() {
 
     private fun showActivityDialog(isStartingTimer: Boolean) {
         val dialogBinding = DialogAddActivityBinding.inflate(LayoutInflater.from(context))
-        val dialogTitle = if (isStartingTimer) "Iniciar Atividade com Cronômetro" else "Registrar Atividade Manualmente"
-        val positiveButtonText = if (isStartingTimer) "Iniciar" else "Salvar"
+        val dialogTitle = if (isStartingTimer) getString(R.string.dialog_title_start_activity_timer) else getString(R.string.dialog_title_log_activity_manual)
+        val positiveButtonText = if (isStartingTimer) getString(R.string.dialog_button_start) else getString(R.string.dialog_button_save)
+
         dialogBinding.tilDuration.isVisible = !isStartingTimer
+        dialogBinding.tilActivityType.hint = getString(R.string.dialog_hint_activity_type)
+        dialogBinding.tilDuration.hint = getString(R.string.dialog_hint_activity_duration)
+
         val activities = resources.getStringArray(R.array.activity_suggestions)
         val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, activities)
         dialogBinding.autoCompleteActivityType.setAdapter(adapter)
+
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
             .setTitle(dialogTitle)
             .setView(dialogBinding.root)
-            .setNegativeButton("Cancelar", null)
+            .setNegativeButton(getString(R.string.dialog_button_cancel), null)
             .setPositiveButton(positiveButtonText) { _, _ ->
                 val tipo = dialogBinding.autoCompleteActivityType.text.toString()
                 if (tipo.isBlank()) {
-                    Toast.makeText(context, "Por favor, defina um tipo de atividade.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, getString(R.string.error_activity_type_required), Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 if (isStartingTimer) {
@@ -380,7 +434,7 @@ class WellbeingDiaryFragment : Fragment() {
                 } else {
                     val duracao = dialogBinding.editTextDuration.text.toString().toIntOrNull() ?: 0
                     if (duracao <= 0) {
-                        Toast.makeText(context, "Por favor, insira uma duração válida.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, getString(R.string.error_activity_duration_required), Toast.LENGTH_SHORT).show()
                         return@setPositiveButton
                     }
                     viewModel.addAtividadeFisica(tipo, duracao)
@@ -395,19 +449,23 @@ class WellbeingDiaryFragment : Fragment() {
             showImageSourceDialog()
         } else {
             findNavController().navigate(R.id.action_global_to_premiumPlansFragment)
-            Toast.makeText(context, "Análise de refeição com IA é um recurso Premium.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, getString(R.string.error_premium_feature_meal_analysis), Toast.LENGTH_LONG).show()
         }
     }
 
     private fun showImageSourceDialog() {
-        val options = arrayOf("Tirar Foto com a Câmera", "Escolher da Galeria")
+        val options = arrayOf(getString(R.string.image_source_camera), getString(R.string.image_source_gallery))
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Analisar Refeição")
+            .setTitle(getString(R.string.image_source_dialog_title))
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> { // Câmera
-                        tempImageUri = getTmpFileUri()
-                        takePictureLauncher.launch(tempImageUri)
+                        try {
+                            tempImageUri = getTmpFileUri()
+                            takePictureLauncher.launch(tempImageUri)
+                        } catch (ex: IOException) {
+                            Toast.makeText(requireContext(), getString(R.string.error_create_image_file_failed), Toast.LENGTH_SHORT).show()
+                        }
                     }
                     1 -> { // Galeria
                         pickImageLauncher.launch("image/*")
@@ -422,16 +480,38 @@ class WellbeingDiaryFragment : Fragment() {
             createNewFile()
             deleteOnExit()
         }
-        return FileProvider.getUriForFile(requireContext(), "${requireContext().packageName}.provider", tmpFile)
+        return FileProvider.getUriForFile(requireContext(), "${BuildConfig.APPLICATION_ID}.provider", tmpFile)
     }
 
     private fun showAddMealDialog(isAnalyzing: Boolean = false) {
+        if (mealDialog != null && mealDialog!!.isShowing) {
+            return
+        }
+
         val dialogBinding = DialogAddMealBinding.inflate(LayoutInflater.from(context))
-        val dialog = MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Registrar Refeição")
+        aiAnalysisResult = null
+
+        dialogBinding.radioCafeDaManha.text = getString(R.string.meal_type_breakfast)
+        dialogBinding.radioAlmoco.text = getString(R.string.meal_type_lunch)
+        dialogBinding.radioJantar.text = getString(R.string.meal_type_dinner)
+        dialogBinding.radioLanche.text = getString(R.string.meal_type_snack)
+
+        dialogBinding.buttonAnalyzeWithCamera.text = getString(R.string.meal_dialog_analyze_with_camera)
+
+        // ✅ CORREÇÃO: Acessando os IDs que adicionamos ao XML
+        dialogBinding.labelBenefits.text = getString(R.string.meal_dialog_benefits_title)
+        dialogBinding.labelTips.text = getString(R.string.meal_dialog_nidus_tip_title)
+        dialogBinding.labelMealType.text = getString(R.string.meal_dialog_meal_type_title)
+
+        dialogBinding.tilDescription.hint = getString(R.string.meal_dialog_hint_description)
+        dialogBinding.tilCalories.hint = getString(R.string.meal_dialog_hint_calories)
+        dialogBinding.tilCalories.suffixText = getString(R.string.meal_dialog_suffix_kcal)
+
+        mealDialog = MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
+            .setTitle(getString(R.string.dialog_add_meal_title))
             .setView(dialogBinding.root)
-            .setNegativeButton("Cancelar") { _, _ -> viewModel.resetMealAnalysisState() }
-            .setPositiveButton("Salvar") { _, _ ->
+            .setNegativeButton(getString(R.string.dialog_button_cancel)) { _, _ -> viewModel.resetMealAnalysisState() }
+            .setPositiveButton(getString(R.string.dialog_button_save)) { _, _ ->
                 val selectedId = dialogBinding.radioGroupMealType.checkedRadioButtonId
                 val tipo = when (selectedId) {
                     R.id.radioCafeDaManha -> TipoRefeicao.CAFE_DA_MANHA
@@ -441,51 +521,85 @@ class WellbeingDiaryFragment : Fragment() {
                 }
                 val descricao = dialogBinding.editTextDescription.text.toString()
                 val calorias = dialogBinding.editTextCalories.text.toString().toIntOrNull()
-                viewModel.addRefeicao(tipo, descricao, calorias)
+
+                // ✅ CORREÇÃO: Passa o aiAnalysisResult (que pode ser null) para o ViewModel
+                viewModel.addRefeicao(tipo, descricao, calorias, aiAnalysisResult)
             }
             .create()
 
-        dialog.setOnShowListener {
-            val positiveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
-            if (isAnalyzing) {
-                viewModel.mealAnalysisState.observe(viewLifecycleOwner) { state ->
-                    dialogBinding.progressBarAnalysis.isVisible = state is MealAnalysisState.Loading
-                    dialogBinding.buttonAnalyzeWithCamera.isEnabled = state !is MealAnalysisState.Loading
-                    positiveButton.isEnabled = state !is MealAnalysisState.Loading
-                    when (state) {
-                        is MealAnalysisState.Success -> {
-                            dialogBinding.layoutAiResults.isVisible = true
-                            dialogBinding.dividerAi.isVisible = true
-                            dialogBinding.editTextDescription.setText(state.result.descricao)
-                            dialogBinding.editTextCalories.setText(state.result.calorias.toString())
-                            dialogBinding.textViewBenefits.text = state.result.beneficios
-                            dialogBinding.textViewTips.text = state.result.dicas
-                            viewModel.resetMealAnalysisState()
-                        }
-                        is MealAnalysisState.Error -> {
-                            Toast.makeText(context, state.message, Toast.LENGTH_LONG).show()
-                            viewModel.resetMealAnalysisState()
-                            dialog.dismiss()
-                        }
-                        else -> {}
-                    }
+        mealDialog?.setOnShowListener {
+            val positiveButton = mealDialog!!.getButton(AlertDialog.BUTTON_POSITIVE)
+
+            viewModel.mealAnalysisState.observe(viewLifecycleOwner) { state ->
+                dialogBinding.progressBarAnalysis.isVisible = state is MealAnalysisState.Loading
+                dialogBinding.buttonAnalyzeWithCamera.isEnabled = state !is MealAnalysisState.Loading
+                positiveButton.isEnabled = state !is MealAnalysisState.Loading
+
+                if(state is MealAnalysisState.Loading) {
+                    dialogBinding.buttonAnalyzeWithCamera.text = getString(R.string.meal_dialog_analyzing)
+                } else {
+                    dialogBinding.buttonAnalyzeWithCamera.text = getString(R.string.meal_dialog_analyze_with_camera)
                 }
+
+                when (state) {
+                    is MealAnalysisState.Success -> {
+                        aiAnalysisResult = state.result
+                        populateFieldsFromAI(dialogBinding, state.result)
+                        viewModel.resetMealAnalysisState()
+                    }
+                    is MealAnalysisState.Error -> {
+                        Toast.makeText(context, state.message, Toast.LENGTH_LONG).show()
+                        viewModel.resetMealAnalysisState()
+                        mealDialog?.dismiss()
+                    }
+                    else -> {}
+                }
+            }
+
+            if (isAnalyzing) {
+                // Dispara a observação; o ViewModel já deve estar em estado de Loading
+                viewModel.mealAnalysisState.value?.let { /* O observador irá capturar */ }
             }
         }
 
         dialogBinding.buttonAnalyzeWithCamera.setOnClickListener {
             handleMealAnalysisClick()
-            dialog.dismiss()
+            mealDialog?.dismiss()
         }
-        dialog.setOnDismissListener {
+        mealDialog?.setOnDismissListener {
             viewModel.mealAnalysisState.removeObservers(viewLifecycleOwner)
             viewModel.resetMealAnalysisState()
+            aiAnalysisResult = null
+            mealDialog = null
         }
-        dialog.show()
+        mealDialog?.show()
+    }
+
+    private fun populateFieldsFromAI(dialogBinding: DialogAddMealBinding, result: MealAnalysisResult) {
+        dialogBinding.layoutAiResults.isVisible = true
+        dialogBinding.dividerAi.isVisible = true
+        dialogBinding.editTextDescription.setText(result.descricao)
+        if (result.calorias > 0) {
+            dialogBinding.editTextCalories.setText(result.calorias.toString())
+        }
+        dialogBinding.textViewBenefits.text = result.beneficios
+        dialogBinding.textViewTips.text = result.dicas
+
+        // ✅ CORREÇÃO: Acessa o campo 'tipoRefeicao' que adicionamos ao modelo
+        val radioId = when (result.tipoRefeicao) {
+            TipoRefeicao.CAFE_DA_MANHA.name -> R.id.radioCafeDaManha
+            TipoRefeicao.ALMOCO.name -> R.id.radioAlmoco
+            TipoRefeicao.JANTAR.name -> R.id.radioJantar
+            else -> R.id.radioLanche
+        }
+        dialogBinding.radioGroupMealType.check(radioId)
     }
 
     private fun showAddSleepDialog() {
+        if (sleepDialog != null && sleepDialog!!.isShowing) return
+
         val dialogBinding = DialogAddSleepBinding.inflate(layoutInflater)
+
         val existingRecord = viewModel.uiState.value?.registroSono
         val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
@@ -498,6 +612,15 @@ class WellbeingDiaryFragment : Fragment() {
         dialogBinding.textViewInterruptionsCount.text = interruptions.toString()
         dialogBinding.editTextNotes.setText(existingRecord?.notas)
 
+        dialogBinding.chipQualityGood.text = getString(R.string.sleep_quality_good)
+        dialogBinding.chipQualityOk.text = getString(R.string.sleep_quality_reasonable)
+        dialogBinding.chipQualityBad.text = getString(R.string.sleep_quality_bad)
+        dialogBinding.tilBedtime.hint = getString(R.string.sleep_bedtime_label)
+        dialogBinding.tilWakeUp.hint = getString(R.string.sleep_wake_time_label)
+        dialogBinding.buttonSuggestTime.text = getString(R.string.sleep_suggest_time_button)
+        dialogBinding.textViewInterruptionsLabel.text = getString(R.string.sleep_interruptions_label)
+        dialogBinding.tilNotes.hint = getString(R.string.sleep_notes_hint)
+
         val initialQuality = try {
             existingRecord?.let { QualidadeSono.valueOf(it.qualidade) } ?: QualidadeSono.RAZOAVEL
         } catch (e: Exception) { QualidadeSono.RAZOAVEL }
@@ -509,13 +632,13 @@ class WellbeingDiaryFragment : Fragment() {
         }
 
         dialogBinding.editTextBedtime.setOnClickListener {
-            showTimePicker("Hora de Dormir", bedtime) { time ->
+            showTimePicker(getString(R.string.sleep_bedtime_label), bedtime) { time ->
                 bedtime = time
                 dialogBinding.editTextBedtime.setText(time.format(timeFormatter))
             }
         }
         dialogBinding.editTextWakeUp.setOnClickListener {
-            showTimePicker("Hora de Acordar", wakeTime) { time ->
+            showTimePicker(getString(R.string.sleep_wake_time_label), wakeTime) { time ->
                 wakeTime = time
                 dialogBinding.editTextWakeUp.setText(time.format(timeFormatter))
             }
@@ -534,23 +657,13 @@ class WellbeingDiaryFragment : Fragment() {
             }
         }
 
-        viewModel.sleepSuggestionEvent.observe(viewLifecycleOwner) { event ->
-            event.getContentIfNotHandled()?.let { (suggestedBedtime, suggestedWaketime) ->
-                bedtime = suggestedBedtime
-                wakeTime = suggestedWaketime
-                dialogBinding.editTextBedtime.setText(bedtime.format(timeFormatter))
-                dialogBinding.editTextWakeUp.setText(wakeTime.format(timeFormatter))
-            }
-        }
+        val dialogTitle = if (existingRecord != null) getString(R.string.dialog_add_sleep_title_edit) else getString(R.string.dialog_add_sleep_title_new)
 
-        MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle(if (existingRecord != null) "Editar Registro de Sono" else "Registrar Sono")
+        sleepDialog = MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
+            .setTitle(dialogTitle)
             .setView(dialogBinding.root)
-            .setNegativeButton("Cancelar") { dialog, _ ->
-                viewModel.sleepSuggestionEvent.removeObservers(viewLifecycleOwner)
-                dialog.dismiss()
-            }
-            .setPositiveButton("Salvar") { _, _ ->
+            .setNegativeButton(getString(R.string.dialog_button_cancel), null)
+            .setPositiveButton(getString(R.string.dialog_button_save)) { _, _ ->
                 val qualidade = when (dialogBinding.chipGroupSleepQuality.checkedChipId) {
                     R.id.chipQualityGood -> QualidadeSono.BOM
                     R.id.chipQualityBad -> QualidadeSono.RUIM
@@ -560,12 +673,14 @@ class WellbeingDiaryFragment : Fragment() {
                 val dataDoRegistro = if (bedtime.isAfter(wakeTime)) LocalDate.now().minusDays(1) else LocalDate.now()
 
                 viewModel.saveSono(dataDoRegistro, bedtime, wakeTime, qualidade, notas, interruptions)
-                viewModel.sleepSuggestionEvent.removeObservers(viewLifecycleOwner)
             }
             .setOnDismissListener {
                 viewModel.sleepSuggestionEvent.removeObservers(viewLifecycleOwner)
+                sleepDialog = null
             }
-            .show()
+            .create()
+
+        sleepDialog?.show()
     }
 
     private fun showTimePicker(title: String, initialTime: LocalTime, onTimeSelected: (LocalTime) -> Unit) {

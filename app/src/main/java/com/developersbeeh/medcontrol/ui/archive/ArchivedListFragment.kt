@@ -1,4 +1,3 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/archive/ArchivedListFragment.kt
 package com.developersbeeh.medcontrol.ui.archive
 
 import android.os.Bundle
@@ -68,17 +67,26 @@ class ArchivedListFragment : Fragment() {
         }
 
         when (filterType) {
-            FilterType.FINISHED -> viewModel.finishedTreatments.observe(viewLifecycleOwner) { meds ->
-                binding.textViewEmptyState.visibility = if (meds.isEmpty()) View.VISIBLE else View.GONE
-                adapter.submitList(meds.map { it to "Tratamento concluído" })
+            FilterType.FINISHED -> {
+                binding.textViewEmptyState.text = getString(R.string.empty_state_no_finished_treatments)
+                viewModel.finishedTreatments.observe(viewLifecycleOwner) { meds ->
+                    binding.textViewEmptyState.visibility = if (meds.isEmpty()) View.VISIBLE else View.GONE
+                    adapter.submitList(meds.map { it to getString(R.string.reason_treatment_finished) })
+                }
             }
-            FilterType.ZERO_STOCK -> viewModel.zeroStockMeds.observe(viewLifecycleOwner) { meds ->
-                binding.textViewEmptyState.visibility = if (meds.isEmpty()) View.VISIBLE else View.GONE
-                adapter.submitList(meds.map { it to "Estoque zerado" })
+            FilterType.ZERO_STOCK -> {
+                binding.textViewEmptyState.text = getString(R.string.empty_state_no_zero_stock_meds)
+                viewModel.zeroStockMeds.observe(viewLifecycleOwner) { meds ->
+                    binding.textViewEmptyState.visibility = if (meds.isEmpty()) View.VISIBLE else View.GONE
+                    adapter.submitList(meds.map { it to getString(R.string.reason_stock_empty) })
+                }
             }
-            FilterType.EXPIRED -> viewModel.expiredStockMeds.observe(viewLifecycleOwner) { meds ->
-                binding.textViewEmptyState.visibility = if (meds.isEmpty()) View.VISIBLE else View.GONE
-                adapter.submitList(meds.map { it to "Contém lotes vencidos" })
+            FilterType.EXPIRED -> {
+                binding.textViewEmptyState.text = getString(R.string.empty_state_no_expired_meds)
+                viewModel.expiredStockMeds.observe(viewLifecycleOwner) { meds ->
+                    binding.textViewEmptyState.visibility = if (meds.isEmpty()) View.VISIBLE else View.GONE
+                    adapter.submitList(meds.map { it to getString(R.string.reason_lots_expired) })
+                }
             }
             null -> {}
         }
@@ -86,7 +94,6 @@ class ArchivedListFragment : Fragment() {
 
     private fun handlePrimaryAction(medicamento: Medicamento) {
         when (filterType) {
-            // ✅ CORREÇÃO: Chamando a função correta 'restoreMedicamento'
             FilterType.FINISHED -> viewModel.restoreMedicamento(medicamento)
             FilterType.ZERO_STOCK -> showRefillStockDialog(medicamento)
             FilterType.EXPIRED -> viewModel.removeExpiredLots(medicamento)
@@ -105,11 +112,10 @@ class ArchivedListFragment : Fragment() {
 
     private fun showDeleteConfirmationDialog(medicamento: Medicamento) {
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Excluir Permanentemente?")
-            .setMessage("Esta ação excluirá '${medicamento.nome}' e todo o seu histórico de doses. Esta ação não pode ser desfeita.")
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Excluir") { _, _ ->
-                // ✅ CORREÇÃO: Chamando a função correta 'deleteMedicationPermanently'
+            .setTitle(getString(R.string.dialog_title_delete_permanent))
+            .setMessage(getString(R.string.dialog_message_delete_permanent, medicamento.nome))
+            .setNegativeButton(getString(R.string.dialog_button_cancel), null)
+            .setPositiveButton(getString(R.string.dialog_button_delete)) { _, _ ->
                 viewModel.deleteMedicationPermanently(medicamento)
             }
             .show()
@@ -117,13 +123,13 @@ class ArchivedListFragment : Fragment() {
 
     private fun showRefillStockDialog(medicamento: Medicamento) {
         val dialogBinding = DialogRefillStockBinding.inflate(LayoutInflater.from(context))
-        dialogBinding.tilRefillAmount.hint = "Adicionar (em ${medicamento.unidadeDeEstoque})"
+        dialogBinding.tilRefillAmount.hint = getString(R.string.dialog_hint_add_stock, medicamento.unidadeDeEstoque)
         val dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy")
         var selectedDate: LocalDate? = null
 
         dialogBinding.editTextExpirationDate.setOnClickListener {
             val datePicker = MaterialDatePicker.Builder.datePicker()
-                .setTitleText("Selecione a Data de Validade")
+                .setTitleText(getString(R.string.dialog_title_select_expiry_date))
                 .setSelection(MaterialDatePicker.todayInUtcMilliseconds())
                 .build()
 
@@ -135,19 +141,19 @@ class ArchivedListFragment : Fragment() {
         }
 
         MaterialAlertDialogBuilder(requireContext(), R.style.AppTheme_DialogAnimation)
-            .setTitle("Repor Estoque de ${medicamento.nome}")
+            .setTitle(getString(R.string.dialog_title_refill_stock, medicamento.nome))
             .setView(dialogBinding.root)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Adicionar") { _, _ ->
+            .setNegativeButton(getString(R.string.dialog_button_cancel), null)
+            .setPositiveButton(getString(R.string.dialog_button_add)) { _, _ ->
                 val amountStr = dialogBinding.editTextRefillAmount.text.toString().replace(',', '.')
                 val amount = amountStr.toDoubleOrNull()
 
                 if (amount == null || amount <= 0) {
-                    Toast.makeText(context, "Quantidade inválida.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, getString(R.string.error_invalid_quantity), Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 if (selectedDate == null) {
-                    Toast.makeText(context, "Selecione a data de validade.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, getString(R.string.error_select_expiry_date), Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
 

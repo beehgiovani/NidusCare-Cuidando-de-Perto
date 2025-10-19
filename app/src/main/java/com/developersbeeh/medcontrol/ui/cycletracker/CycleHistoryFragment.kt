@@ -8,6 +8,7 @@ import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.fragment.findNavController
+import com.developersbeeh.medcontrol.R
 import com.developersbeeh.medcontrol.databinding.FragmentCycleHistoryBinding
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -17,7 +18,6 @@ class CycleHistoryFragment : Fragment() {
     private var _binding: FragmentCycleHistoryBinding? = null
     private val binding get() = _binding!!
 
-    // Usamos 'activityViewModels' para compartilhar o mesmo ViewModel da tela do calendário
     private val viewModel: CycleTrackerViewModel by activityViewModels()
     private lateinit var historyAdapter: CycleHistoryAdapter
 
@@ -38,8 +38,9 @@ class CycleHistoryFragment : Fragment() {
     }
 
     private fun setupToolbar() {
+        // ✅ REATORADO: Define o título da toolbar
+        binding.toolbar.title = getString(R.string.cycle_history_title)
         binding.toolbar.setNavigationOnClickListener {
-            // Ação para voltar para a tela anterior
             findNavController().navigateUp()
         }
     }
@@ -51,9 +52,11 @@ class CycleHistoryFragment : Fragment() {
 
     private fun observeViewModel() {
         viewModel.cycleHistory.observe(viewLifecycleOwner) { historyList ->
-            // Mostra o estado de lista vazia se a lista for nula ou vazia
-            binding.textViewEmptyState.isVisible = historyList.isNullOrEmpty()
-            binding.recyclerViewHistory.isVisible = !historyList.isNullOrEmpty()
+            val isEmpty = historyList.isNullOrEmpty()
+            // ✅ REATORADO: Define o texto do estado vazio
+            binding.textViewEmptyState.text = getString(R.string.cycle_history_empty)
+            binding.textViewEmptyState.isVisible = isEmpty
+            binding.recyclerViewHistory.isVisible = !isEmpty
 
             historyAdapter.submitList(historyList)
         }

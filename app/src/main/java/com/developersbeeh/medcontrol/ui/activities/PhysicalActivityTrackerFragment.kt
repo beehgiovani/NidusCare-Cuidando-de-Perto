@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
@@ -46,6 +47,9 @@ class PhysicalActivityTrackerFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         viewModel.initialize(args.dependentId)
 
+        // ✅ REFATORADO: Seta o título da tela
+        (activity as? AppCompatActivity)?.supportActionBar?.title = getString(R.string.activity_history_title)
+
         binding.recyclerViewActivityHistory.adapter = adapter
         binding.recyclerViewActivityHistory.layoutManager = LinearLayoutManager(requireContext())
 
@@ -61,7 +65,7 @@ class PhysicalActivityTrackerFragment : Fragment() {
             when (state) {
                 is UiState.Success -> {
                     if (state.data.history.isEmpty()) {
-                        binding.emptyState.textViewErrorMessage.text = "Nenhum registro de atividade encontrado."
+                        binding.emptyState.textViewErrorMessage.text = getString(R.string.empty_state_no_activity_records)
                     } else {
                         setupChart(state.data.history, state.data.dependent.metaAtividadeMinutos.toFloat())
                         adapter.submitList(state.data.history)
@@ -79,14 +83,13 @@ class PhysicalActivityTrackerFragment : Fragment() {
     private fun setupChart(records: List<AtividadeFisica>, goal: Float) {
         val sevenDaysAgo = LocalDate.now().minusDays(6)
         val dailyTotals = records
-            // ✅ CORREÇÃO: Acessando a propriedade 'timestamp' diretamente
             .filter { !it.timestamp.toLocalDate().isBefore(sevenDaysAgo) }
             .groupBy { it.timestamp.toLocalDate() }
             .mapValues { (_, entries) -> entries.sumOf { it.duracaoMinutos } }
 
         val entries = ArrayList<BarEntry>()
         val xAxisLabels = ArrayList<String>()
-        val dayFormatter = DateTimeFormatter.ofPattern("dd/MM")
+        val dayFormatter = DateTimeFormatter.ofPattern(getString(R.string.date_format_dd_mm))
 
         for (i in 0..6) {
             val date = sevenDaysAgo.plusDays(i.toLong())
@@ -95,7 +98,7 @@ class PhysicalActivityTrackerFragment : Fragment() {
             xAxisLabels.add(date.format(dayFormatter))
         }
 
-        val dataSet = BarDataSet(entries, "Minutos de Atividade").apply {
+        val dataSet = BarDataSet(entries, getString(R.string.activity_chart_label)).apply {
             color = ContextCompat.getColor(requireContext(), R.color.md_theme_primary)
             setDrawValues(false)
         }
@@ -111,6 +114,7 @@ class PhysicalActivityTrackerFragment : Fragment() {
             description.isEnabled = false
             legend.isEnabled = false
             setDrawGridBackground(false)
+            setDrawBarShadow(false)
             setScaleEnabled(false)
 
             xAxis.apply {
@@ -126,7 +130,7 @@ class PhysicalActivityTrackerFragment : Fragment() {
                 textColor = ContextCompat.getColor(context, R.color.md_theme_onSurfaceVariant)
 
                 removeAllLimitLines()
-                val goalLine = LimitLine(goal, "Meta").apply {
+                val goalLine = LimitLine(goal, getString(R.string.chart_label_goal)).apply {
                     lineWidth = 2f
                     lineColor = ContextCompat.getColor(context, R.color.md_theme_tertiary)
                     textColor = ContextCompat.getColor(context, R.color.md_theme_tertiary)

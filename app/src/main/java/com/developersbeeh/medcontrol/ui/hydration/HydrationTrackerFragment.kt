@@ -1,11 +1,10 @@
-// src/main/java/com/developersbeeh/medcontrol/ui/hydration/HydrationTrackerFragment.kt
 package com.developersbeeh.medcontrol.ui.hydration
 
-import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
@@ -48,6 +47,9 @@ class HydrationTrackerFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         viewModel.initialize(args.dependentId)
 
+        // ✅ REFATORADO: Seta o título da tela
+        (activity as? AppCompatActivity)?.supportActionBar?.title = getString(R.string.hydration_history_title)
+
         binding.recyclerViewHydrationHistory.adapter = adapter
         binding.recyclerViewHydrationHistory.layoutManager = LinearLayoutManager(requireContext())
 
@@ -63,7 +65,7 @@ class HydrationTrackerFragment : Fragment() {
             when (state) {
                 is UiState.Success -> {
                     if (state.data.history.isEmpty()) {
-                        binding.emptyState.textViewErrorMessage.text = "Nenhum registro de hidratação encontrado."
+                        binding.emptyState.textViewErrorMessage.text = getString(R.string.empty_state_no_hydration_records)
                     } else {
                         setupChart(state.data.history, state.data.dependent.metaHidratacaoMl.toFloat())
                         adapter.submitList(state.data.history)
@@ -87,7 +89,7 @@ class HydrationTrackerFragment : Fragment() {
 
         val entries = ArrayList<BarEntry>()
         val xAxisLabels = ArrayList<String>()
-        val dayFormatter = DateTimeFormatter.ofPattern("dd/MM")
+        val dayFormatter = DateTimeFormatter.ofPattern(getString(R.string.date_format_dd_mm))
 
         for (i in 0..6) {
             val date = sevenDaysAgo.plusDays(i.toLong())
@@ -96,7 +98,7 @@ class HydrationTrackerFragment : Fragment() {
             xAxisLabels.add(date.format(dayFormatter))
         }
 
-        val dataSet = BarDataSet(entries, "Consumo de Água (ml)").apply {
+        val dataSet = BarDataSet(entries, getString(R.string.hydration_chart_label)).apply {
             color = ContextCompat.getColor(requireContext(), R.color.md_theme_primary)
             setDrawValues(false)
         }
@@ -126,11 +128,9 @@ class HydrationTrackerFragment : Fragment() {
                 gridColor = ContextCompat.getColor(context, R.color.md_theme_outline)
                 textColor = ContextCompat.getColor(context, R.color.md_theme_onSurfaceVariant)
 
-                // Remove a linha de meta anterior se existir
                 removeAllLimitLines()
 
-                // Adiciona a linha de meta
-                val goalLine = LimitLine(goal, "Meta").apply {
+                val goalLine = LimitLine(goal, getString(R.string.chart_label_goal)).apply {
                     lineWidth = 2f
                     lineColor = ContextCompat.getColor(context, R.color.md_theme_tertiary)
                     textColor = ContextCompat.getColor(context, R.color.md_theme_tertiary)

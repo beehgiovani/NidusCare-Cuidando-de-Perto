@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.developersbeeh.medcontrol.R
 import com.developersbeeh.medcontrol.data.model.Hidratacao
 import com.developersbeeh.medcontrol.databinding.ItemHydrationHistoryBinding
 import java.time.format.DateTimeFormatter
@@ -29,8 +30,9 @@ class HydrationHistoryAdapter : ListAdapter<Hidratacao, HydrationHistoryAdapter.
         private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault())
 
         fun bind(record: Hidratacao) {
-            binding.textViewAmount.text = "+${record.quantidadeMl} ml"
-            // ✅ CORREÇÃO: Acessando a propriedade 'timestamp' diretamente
+            val context = binding.root.context
+            // ✅ REATORADO: Usa strings.xml
+            binding.textViewAmount.text = "${context.getString(R.string.hydration_log_prefix)}${record.quantidadeMl} ${context.getString(R.string.hydration_log_suffix)}"
             binding.textViewTime.text = record.timestamp.format(timeFormatter)
         }
     }
