@@ -1,7 +1,7 @@
 package com.developersbeeh.medcontrol.ui.timeline
 
 import android.view.LayoutInflater
-import android.view.View // Importar View
+import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.ContextCompat
 import androidx.paging.PagingDataAdapter
@@ -80,12 +80,17 @@ class TimelineAdapter : PagingDataAdapter<TimelineListItem, RecyclerView.ViewHol
             binding.textViewTime.text = log.timestamp.format(timeFormatter)
             binding.textViewDetails.text = log.description
 
-            // ✅ ESTA LÓGICA ESTÁ CORRETA e agora funcionará
-            binding.textViewAutor.visibility = View.VISIBLE
-            if (log.author.equals("Nidus AI", ignoreCase = true) || log.author.equals("Sistema", ignoreCase = true)) {
-                binding.textViewAutor.text = log.author
+
+            if (log.category == TimelineItemCategory.ACTIVITY) {
+                binding.textViewAutor.visibility = View.GONE
             } else {
-                binding.textViewAutor.text = context.getString(R.string.timeline_author_prefix, log.author)
+
+                binding.textViewAutor.visibility = View.VISIBLE
+                if (log.author.equals("Nidus AI", ignoreCase = true) || log.author.equals("Sistema", ignoreCase = true)) {
+                    binding.textViewAutor.text = log.author
+                } else {
+                    binding.textViewAutor.text = context.getString(R.string.timeline_author_prefix, log.author)
+                }
             }
 
             binding.timelineIcon.setImageResource(log.iconRes)

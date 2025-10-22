@@ -59,7 +59,6 @@ class TimelineFragment : Fragment() {
     private fun setupRecyclerView() {
         adapter = TimelineAdapter()
         binding.recyclerViewTimeline.adapter = adapter
-
         binding.recyclerViewTimeline.layoutManager = LinearLayoutManager(requireContext())
 
         adapter.addLoadStateListener { loadState ->
@@ -106,7 +105,6 @@ class TimelineFragment : Fragment() {
     }
 
     private fun setupFilters() {
-        // ✅ REATORADO: Seta os textos dos Chips
         binding.chipFilterAll.text = getString(R.string.timeline_filter_all)
         binding.chipFilterDoses.text = getString(R.string.timeline_filter_doses)
         binding.chipFilterNotes.text = getString(R.string.timeline_filter_notes)
@@ -121,7 +119,7 @@ class TimelineFragment : Fragment() {
                 when (checkedIds.first()) {
                     R.id.chipFilterDoses -> TimelineFilter.DOSE
                     R.id.chipFilterNotes -> TimelineFilter.NOTE
-                    R.id.chipFilterOtherActivities -> TimelineFilter.ACTIVITY // Este filtro deve corresponder ao "Bem-Estar"
+                    R.id.chipFilterOtherActivities -> TimelineFilter.WELLBEING
                     R.id.chipFilterInsights -> TimelineFilter.INSIGHT
                     else -> TimelineFilter.ALL
                 }
@@ -141,7 +139,6 @@ class TimelineFragment : Fragment() {
     private fun setupEmptyState() {
         val emptyBinding = LayoutEmptyStateBinding.bind(binding.emptyStateLayout.root)
         emptyBinding.lottieAnimationView.setAnimation(R.raw.empty_list)
-        // ✅ REATORADO: Usa strings.xml
         emptyBinding.textViewEmptyTitle.text = getString(R.string.empty_state_timeline_title)
         emptyBinding.textViewEmptySubtitle.text = getString(R.string.empty_state_timeline_subtitle)
         emptyBinding.buttonEmptyAction.text = getString(R.string.empty_state_timeline_button)

@@ -7,15 +7,14 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 
 enum class TimelineItemCategory {
-    DOSE, NOTE, ACTIVITY, INSIGHT, WELLBEING // ✅ Adicionado WELLBEING
+    DOSE, NOTE, ACTIVITY, INSIGHT,
+    WELLBEING
 }
 
 data class TimelineLogItem(
     val id: String,
     val timestamp: LocalDateTime,
     val description: String,
-    // ✅ CORREÇÃO: O nome do campo no nosso modelo de UI deve ser 'author'
-    // O ViewModel fará o mapeamento de 'authorName' (do Firestore) para 'author' (aqui)
     val author: String,
     @DrawableRes val iconRes: Int,
     @ColorRes val iconTintRes: Int,

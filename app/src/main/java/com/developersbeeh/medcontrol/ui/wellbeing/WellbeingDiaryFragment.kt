@@ -40,7 +40,9 @@ import com.developersbeeh.medcontrol.data.model.QualidadeSono
 import com.developersbeeh.medcontrol.data.model.TipoRefeicao
 import com.developersbeeh.medcontrol.databinding.*
 import com.developersbeeh.medcontrol.ui.common.LoadingDialogFragment
+// ✅ IMPORT CORRETO
 import com.developersbeeh.medcontrol.ui.sleep.getDisplayName
+// ✅ IMPORT CORRETO
 import com.developersbeeh.medcontrol.ui.meals.getDisplayName
 import com.developersbeeh.medcontrol.ui.wellbeing.timer.ActivityTimerService
 import com.developersbeeh.medcontrol.ui.wellbeing.timer.TimerServiceManager
@@ -124,7 +126,6 @@ class WellbeingDiaryFragment : Fragment() {
         userPreferences = UserPreferences(requireContext())
         (activity as? AppCompatActivity)?.supportActionBar?.title = getString(R.string.wellbeing_diary_title)
 
-        // ✅ CORREÇÃO: O padrão com "Hoje," foi corrigido no strings.xml
         val dateFormatter = DateTimeFormatter.ofPattern(getString(R.string.date_header_format), locale)
         binding.textViewDate.text = LocalDate.now().format(dateFormatter).replaceFirstChar { it.uppercase() }
 
@@ -230,15 +231,28 @@ class WellbeingDiaryFragment : Fragment() {
             if (!binding.cardSleep.root.isVisible) binding.cardSleep.root.startAnimation(animation)
             binding.cardSleep.root.isVisible = true
             val registroSono = state.registroSono
-            if (registroSono != null) {
+
+            // ✅ LÓGICA DE SONO ATUALIZADA
+            // Verifica se o registro de sono é válido PARA HOJE (ou seja, se a pessoa acordou hoje)
+            val registroDeHoje = registroSono?.takeIf {
+                it.getDataAsLocalDate().isEqual(LocalDate.now())
+            }
+
+            if (registroDeHoje != null) {
                 animateTextViewUpdate(binding.cardSleep.textViewSleepDuration, "${state.sonoTotalHoras}h ${state.sonoTotalMinutos}m")
-                val qualidade = (try { QualidadeSono.valueOf(registroSono.qualidade) } catch (e: Exception) { QualidadeSono.RAZOAVEL }).getDisplayName(requireContext())
+                val qualidade = (try { QualidadeSono.valueOf(registroDeHoje.qualidade) } catch (e: Exception) { QualidadeSono.RAZOAVEL }).getDisplayName(requireContext())
                 animateTextViewUpdate(binding.cardSleep.textViewSleepQuality, getString(R.string.sleep_quality_format, qualidade))
                 binding.cardSleep.buttonAddEditSleep.text = getString(R.string.sleep_button_edit)
             } else {
+                // Se não há registro HOJE, mostra o estado de "Registrar"
                 binding.cardSleep.textViewSleepDuration.text = getString(R.string.sleep_duration_empty)
                 binding.cardSleep.textViewSleepQuality.text = getString(R.string.sleep_no_record_today)
                 binding.cardSleep.buttonAddEditSleep.text = getString(R.string.sleep_button_register)
+
+                // Limpa o registro "antigo" da UI se ele ainda estiver lá
+                if (state.registroSono != null) {
+                    viewModel.clearCurrentSleepRecordForNewEntry()
+                }
             }
             binding.cardSleep.labelSleep.text = getString(R.string.category_sleep)
         }
@@ -256,6 +270,7 @@ class WellbeingDiaryFragment : Fragment() {
         viewModel.sleepSuggestionEvent.observe(viewLifecycleOwner) { event ->
             if (sleepDialog != null && sleepDialog!!.isShowing) {
                 event.getContentIfNotHandled()?.let { (suggestedBedtime, suggestedWaketime) ->
+                    // ✅ CORREÇÃO: Bloco try-catch envolvendo a busca e o bind
                     try {
                         val rootView = sleepDialog!!.findViewById<View>(R.id.dialog_add_sleep_root)
                         if (rootView != null) {
@@ -498,7 +513,6 @@ class WellbeingDiaryFragment : Fragment() {
 
         dialogBinding.buttonAnalyzeWithCamera.text = getString(R.string.meal_dialog_analyze_with_camera)
 
-        // ✅ CORREÇÃO: Acessando os IDs que adicionamos ao XML
         dialogBinding.labelBenefits.text = getString(R.string.meal_dialog_benefits_title)
         dialogBinding.labelTips.text = getString(R.string.meal_dialog_nidus_tip_title)
         dialogBinding.labelMealType.text = getString(R.string.meal_dialog_meal_type_title)
@@ -585,7 +599,6 @@ class WellbeingDiaryFragment : Fragment() {
         dialogBinding.textViewBenefits.text = result.beneficios
         dialogBinding.textViewTips.text = result.dicas
 
-        // ✅ CORREÇÃO: Acessa o campo 'tipoRefeicao' que adicionamos ao modelo
         val radioId = when (result.tipoRefeicao) {
             TipoRefeicao.CAFE_DA_MANHA.name -> R.id.radioCafeDaManha
             TipoRefeicao.ALMOCO.name -> R.id.radioAlmoco
@@ -600,6 +613,7 @@ class WellbeingDiaryFragment : Fragment() {
 
         val dialogBinding = DialogAddSleepBinding.inflate(layoutInflater)
 
+        // ✅ CORREÇÃO: Pega o registro da UI (que pode ser nulo se já for de ontem)
         val existingRecord = viewModel.uiState.value?.registroSono
         val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
@@ -670,6 +684,8 @@ class WellbeingDiaryFragment : Fragment() {
                     else -> QualidadeSono.RAZOAVEL
                 }
                 val notas = dialogBinding.editTextNotes.text.toString().trim().takeIf { it.isNotEmpty() }
+
+                // ✅ CORREÇÃO LÓGICA: Determina a data do registro
                 val dataDoRegistro = if (bedtime.isAfter(wakeTime)) LocalDate.now().minusDays(1) else LocalDate.now()
 
                 viewModel.saveSono(dataDoRegistro, bedtime, wakeTime, qualidade, notas, interruptions)

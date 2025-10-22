@@ -139,7 +139,7 @@ class BemEstarViewModel @Inject constructor(
         val caloriasMeta = dependent.metaCaloriasDiarias
         val caloriasPorcentagem = if (caloriasMeta > 0) ((caloriasTotal.toDouble() / caloriasMeta) * 100).toInt() else 0
 
-        val registroSonoHoje = sleepRecords.firstOrNull()
+        val registroSonoHoje = sleepRecords.firstOrNull { it.getDataAsLocalDate().isEqual(LocalDate.now()) }
         var sonoHoras = 0L
         var sonoMinutos = 0L
         if (registroSonoHoje != null) {
@@ -166,7 +166,7 @@ class BemEstarViewModel @Inject constructor(
             caloriasTotal = caloriasTotal,
             caloriasMeta = caloriasMeta,
             caloriasPorcentagem = caloriasPorcentagem.coerceAtMost(100),
-            registroSono = registroSonoHoje,
+            registroSono = registroSonoHoje, // Armazena apenas o registro de hoje
             sonoTotalHoras = sonoHoras,
             sonoTotalMinutos = sonoMinutos,
             imcResult = imcResult,
@@ -259,7 +259,6 @@ class BemEstarViewModel @Inject constructor(
         viewModelScope.launch {
             val dependentId = _dependentId.value ?: return@launch
             val novoRegistro = Hidratacao(quantidadeMl = quantidadeMl)
-            // 'novoRegistro' agora tem 'dateString' graças ao 'init' do modelo
             val result = firestoreRepository.saveHidratacaoRecord(dependentId, novoRegistro)
             if (result.isSuccess) {
                 saveLog(dependentId, application.getString(R.string.log_water_intake, quantidadeMl), TipoAtividade.ANOTACAO_CRIADA)
@@ -298,9 +297,11 @@ class BemEstarViewModel @Inject constructor(
             }
 
             val caloriasFinais = calorias ?: aiResult?.calorias
+
             val novoRegistro = Refeicao(tipo = tipo.name, descricao = descricao, calorias = caloriasFinais)
             val result = firestoreRepository.saveRefeicaoRecord(dependentId, novoRegistro)
             if (result.isSuccess) {
+                // ✅ CORREÇÃO: 'getDisplayName' agora é encontrada
                 val logDesc = caloriasFinais?.let {
                     application.getString(R.string.log_meal_logged_kcal, tipo.getDisplayName(application), it)
                 } ?: application.getString(R.string.log_meal_logged, tipo.getDisplayName(application))
@@ -396,16 +397,24 @@ class BemEstarViewModel @Inject constructor(
         _mealAnalysisState.value = MealAnalysisState.Idle
     }
 
+    /**
+     * Limpa o registro de sono atual da UI para permitir um novo registro.
+     */
+    fun clearCurrentSleepRecordForNewEntry() {
+        _uiState.value = _uiState.value?.copy(registroSono = null)
+    }
+
     private suspend fun saveLog(dependentId: String, descricao: String, tipo: TipoAtividade) {
         val autorNome = userPreferences.getUserName()
         val autorId = if (userPreferences.getIsCaregiver()) {
             userRepository.getCurrentUser()?.uid ?: ""
         } else { "dependent_user" }
+
         val log = Atividade(
-            descricao = descricao,
+            descricao = descricao, // Descrição limpa (sem autor)
             tipo = tipo,
             autorId = autorId,
-            autorNome = autorNome // O 'getAuthorName' no backend usará este campo
+            autorNome = autorNome // O backend vai usar este campo
         )
         firestoreRepository.saveActivityLog(dependentId, log)
     }

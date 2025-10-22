@@ -1,5 +1,6 @@
 package com.developersbeeh.medcontrol.ui.dashboard
 
+import android.annotation.SuppressLint
 import android.app.Application
 import android.util.Log
 import androidx.lifecycle.*
@@ -296,6 +297,7 @@ class DashboardDependenteViewModel @Inject constructor(
         dependente.value?.let { _showCredentials.value = Event(Pair(it.codigoDeVinculo, it.senha)) }
     }
 
+    @SuppressLint("StringFormatMatches")
     fun onToggleAlarmClicked() {
         dependente.value?.let {
             val newStatus = !it.usaAlarmeTelaCheia

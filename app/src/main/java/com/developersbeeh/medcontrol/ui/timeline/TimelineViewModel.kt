@@ -19,7 +19,7 @@ import javax.inject.Inject
 private const val TAG = "TimelineViewModel"
 
 enum class TimelineFilter {
-    ALL, DOSE, NOTE, ACTIVITY, INSIGHT, WELLBEING // ✅ Adicionado WELLBEING
+    ALL, DOSE, NOTE, ACTIVITY, INSIGHT, WELLBEING
 }
 
 @HiltViewModel
@@ -71,7 +71,7 @@ class TimelineViewModel @Inject constructor(
             "NOTE" -> TimelineItemCategory.NOTE
             "ACTIVITY" -> TimelineItemCategory.ACTIVITY
             "INSIGHT" -> TimelineItemCategory.INSIGHT
-            "WELLBEING" -> TimelineItemCategory.WELLBEING // ✅ Mapeado
+            "WELLBEING" -> TimelineItemCategory.WELLBEING
             else -> {
                 Log.w(TAG, "Tipo de evento da timeline desconhecido: '${this.type}'. Classificando como ACTIVITY.")
                 TimelineItemCategory.ACTIVITY
@@ -83,7 +83,6 @@ class TimelineViewModel @Inject constructor(
                 id = this.id,
                 timestamp = this.getLocalDateTime(),
                 description = this.description,
-                // ✅ CORREÇÃO: Mapeia 'authorName' (do Firestore) para 'author' (da UI)
                 author = this.authorName,
                 iconRes = TimelineIconMapper.getIconRes(this.icon),
                 iconTintRes = TimelineIconMapper.getColorRes(this.type),
