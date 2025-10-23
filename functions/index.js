@@ -3149,5 +3149,5 @@ exports.getWellbeingGoals = onCall({ cors: true }, async (request) => {
     }
 });
 
-logger.log("✅ Novas funcionalidades premium de bem-estar carregadas com sucesso!");
+logger.log("✅ Novas funcionalidades premium de bem-estar carregadas com sucesso! ");
 
