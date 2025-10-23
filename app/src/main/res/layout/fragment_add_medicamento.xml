@@ -11,7 +11,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="@dimen/padding_normal">
 
         <TextView
             android:id="@+id/textViewTitle"
@@ -38,7 +38,7 @@
                     android:clickable="true"
                     android:focusable="true"
                     android:gravity="center_vertical"
-                    android:padding="16dp">
+                    android:padding="@dimen/padding_normal">
                     <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_edit_note"/>
                     <LinearLayout
                         android:layout_width="0dp"
@@ -57,7 +57,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="16dp"
+                    android:padding="@dimen/padding_normal"
                     android:visibility="visible">
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -84,7 +84,7 @@
                         <androidx.constraintlayout.widget.ConstraintLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:padding="12dp">
+                            android:padding="@dimen/padding_medium">
                             <ImageView
                                 android:id="@+id/suggestionIcon"
                                 android:layout_width="wrap_content"
@@ -189,7 +189,7 @@
                     android:clickable="true"
                     android:focusable="true"
                     android:gravity="center_vertical"
-                    android:padding="16dp">
+                    android:padding="@dimen/padding_normal">
                     <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_injection"/>
 
                     <LinearLayout
@@ -221,7 +221,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="16dp"
+                    android:padding="@dimen/padding_normal"
                     android:visibility="gone">
                     <TextView
                         android:layout_width="wrap_content"
@@ -478,7 +478,7 @@
                     android:clickable="true"
                     android:focusable="true"
                     android:gravity="center_vertical"
-                    android:padding="16dp">
+                    android:padding="@dimen/padding_normal">
                     <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_schedule"/>
                     <LinearLayout
                         android:layout_width="0dp"
@@ -496,7 +496,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="16dp"
+                    android:padding="@dimen/padding_normal"
                     android:visibility="gone">
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/til_data_inicio"
@@ -623,7 +623,7 @@
                     android:clickable="true"
                     android:focusable="true"
                     android:gravity="center_vertical"
-                    android:padding="16dp">
+                    android:padding="@dimen/padding_normal">
                     <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_inventory"/>
                     <LinearLayout
                         android:layout_width="0dp"
@@ -642,7 +642,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="16dp"
+                    android:padding="@dimen/padding_normal"
                     android:visibility="gone">
                     <LinearLayout
                         android:id="@+id/layoutLocaisAplicacao"

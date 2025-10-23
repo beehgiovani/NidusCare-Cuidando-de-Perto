@@ -11,9 +11,9 @@
         android:id="@+id/cardHeader"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_margin="16dp"
+        android:layout_margin="@dimen/margin_normal"
         android:visibility="invisible"
-        app:cardElevation="2dp"
+        app:cardElevation="@dimen/card_elevation"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
@@ -23,7 +23,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="@dimen/padding_normal">
 
             <TextView
                 android:id="@+id/textViewCurrentPhase"
@@ -169,9 +169,9 @@
         android:id="@+id/detailsCard"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_margin="16dp"
+        android:layout_margin="@dimen/margin_normal"
         android:visibility="gone"
-        app:cardElevation="4dp"
+        app:cardElevation="@dimen/card_elevation"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/calendarView"
@@ -180,7 +180,7 @@
         <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:padding="16dp">
+            android:padding="@dimen/padding_normal">
 
             <TextView
                 android:id="@+id/textViewDetailsTitle"
@@ -310,7 +310,7 @@
         android:id="@+id/buttonLogToday"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_margin="16dp"
+        android:layout_margin="@dimen/margin_normal"
         android:contentDescription="Registrar Hoje"
         android:src="@drawable/ic_edit_calendar"
         app:layout_constraintBottom_toBottomOf="parent"

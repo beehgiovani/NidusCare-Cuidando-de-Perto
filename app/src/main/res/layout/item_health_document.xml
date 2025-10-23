@@ -13,7 +13,7 @@
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="16dp">
+        android:padding="@dimen/padding_normal">
 
         <ImageView
             android:id="@+id/imageViewDocIcon"
@@ -21,7 +21,7 @@
             android:layout_height="40dp"
             android:background="@drawable/circle_background_primary"
             android:contentDescription="Ícone do tipo de documento"
-            android:padding="8dp"
+            android:padding="@dimen/padding_small"
             app:tint="?attr/colorOnPrimary"
             tools:src="@drawable/ic_lab_test" />
 

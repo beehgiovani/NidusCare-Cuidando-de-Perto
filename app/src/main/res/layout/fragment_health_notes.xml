@@ -87,7 +87,7 @@
         android:id="@+id/fabAddHealthNote"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_margin="16dp"
+        android:layout_margin="@dimen/margin_normal"
         android:contentDescription="Adicionar anotação"
         android:src="@drawable/ic_add"
         app:layout_constraintBottom_toBottomOf="parent"

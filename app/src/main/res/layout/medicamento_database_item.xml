@@ -9,14 +9,14 @@
     android:focusable="true"
     android:foreground="?android:attr/selectableItemBackground"
     app:cardCornerRadius="8dp"
-    app:cardElevation="2dp"
+    app:cardElevation="@dimen/card_elevation"
     app:strokeWidth="0dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:padding="@dimen/padding_medium">
 
         <TextView
             android:id="@+id/textViewMedicamentoNome"

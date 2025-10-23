@@ -34,6 +34,10 @@ class PharmacySelectionFragment : Fragment() {
     private lateinit var adapter: PharmacyAdapter
     private var loadingDialog: LoadingDialogFragment? = null
 
+    // ✅ NOVO: Armazenar localização do usuário
+    private var userLat: Double? = null
+    private var userLng: Double? = null
+
     private val locationPermissionRequest = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -75,7 +79,9 @@ class PharmacySelectionFragment : Fragment() {
             },
             onOptionsClick = { place, anchorView ->
                 viewModel.fetchDetailsForOptions(place)
-            }
+            },
+            userLat = userLat, // ✅ NOVO: Passar localização para adapter
+            userLng = userLng   // ✅ NOVO: Passar localização para adapter
         )
         binding.recyclerViewPharmacies.adapter = adapter
         binding.recyclerViewPharmacies.layoutManager = LinearLayoutManager(requireContext())
@@ -86,17 +92,39 @@ class PharmacySelectionFragment : Fragment() {
             val radiusInMeters = when (checkedId) {
                 R.id.chip_2km -> 2000
                 R.id.chip_5km -> 5000
+                R.id.chip_10km -> 10000 // ✅ NOVO: Opção de 10km
                 else -> 1000 // Padrão 1km
             }
             viewModel.setDistanceFilter(radiusInMeters)
         }
+        
         binding.layoutError.buttonRetry.setOnClickListener {
             requestLocationPermission()
         }
-
     }
 
     private fun observeViewModel() {
+        // ✅ NOVO: Observar localização do usuário
+        viewModel.userLocation.observe(viewLifecycleOwner) { location ->
+            location?.let {
+                userLat = it.first
+                userLng = it.second
+                
+                // Recriar adapter com nova localização
+                adapter = PharmacyAdapter(
+                    onPharmacyClick = { place ->
+                        viewModel.onPharmacySelected(place)
+                    },
+                    onOptionsClick = { place, anchorView ->
+                        viewModel.fetchDetailsForOptions(place)
+                    },
+                    userLat = userLat,
+                    userLng = userLng
+                )
+                binding.recyclerViewPharmacies.adapter = adapter
+            }
+        }
+
         viewModel.uiState.observe(viewLifecycleOwner) { state ->
             binding.progressBar.isVisible = state is UiState.Loading
             binding.recyclerViewPharmacies.isVisible = state is UiState.Success && state.data.isNotEmpty()
@@ -108,6 +136,9 @@ class PharmacySelectionFragment : Fragment() {
                         binding.layoutError.textViewErrorMessage.text = "Nenhuma farmácia encontrada neste raio. Tente aumentar a distância."
                     } else {
                         adapter.submitList(state.data)
+                        
+                        // ✅ NOVO: Mostrar banner de propaganda após lista carregar
+                        showAdBannerIfNeeded()
                     }
                 }
                 is UiState.Error -> {
@@ -141,7 +172,6 @@ class PharmacySelectionFragment : Fragment() {
                     }
                     is UiState.Success -> {
                         loadingDialog?.dismiss()
-                        // ✅ CORREÇÃO: Passa ambos os objetos para a função
                         showPharmacyOptions(state.data.first, state.data.second)
                     }
                     is UiState.Error -> {
@@ -153,7 +183,6 @@ class PharmacySelectionFragment : Fragment() {
         }
     }
 
-    // ✅ CORREÇÃO: A função agora recebe o Place original, além dos detalhes
     private fun showPharmacyOptions(details: PlaceDetails, originalPlace: Place) {
         val anchorView = findAnchorViewForPlace(details.placeId) ?: return
         val popup = PopupMenu(requireContext(), anchorView)
@@ -168,9 +197,11 @@ class PharmacySelectionFragment : Fragment() {
                     true
                 }
                 R.id.action_select_pharmacy -> {
-                    // Ao selecionar, usamos o objeto 'originalPlace' que já tem tudo que precisamos,
-                    // e que o ViewModel espera receber.
                     viewModel.onPharmacySelected(originalPlace)
+                    true
+                }
+                R.id.action_navigate -> { // ✅ NOVO: Navegar para farmácia
+                    navigateToPharmacy(originalPlace)
                     true
                 }
                 else -> false
@@ -200,8 +231,46 @@ class PharmacySelectionFragment : Fragment() {
         }
     }
 
+    /**
+     * ✅ NOVO: Navegar para farmácia usando Google Maps/Waze
+     */
+    private fun navigateToPharmacy(place: Place) {
+        val lat = place.geometry.location.lat
+        val lng = place.geometry.location.lng
+        val uri = Uri.parse("geo:$lat,$lng?q=$lat,$lng(${place.name})")
+        val intent = Intent(Intent.ACTION_VIEW, uri)
+        intent.setPackage("com.google.android.apps.maps")
+        
+        if (intent.resolveActivity(requireContext().packageManager) != null) {
+            startActivity(intent)
+        } else {
+            // Fallback para navegador
+            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lng"))
+            startActivity(browserIntent)
+        }
+    }
+
+    /**
+     * ✅ NOVO: Mostrar banner de propaganda discreto (apenas para usuários não-premium)
+     */
+    private fun showAdBannerIfNeeded() {
+        // Verificar se usuário é premium (implementar verificação real)
+        val isPremium = false // TODO: Implementar verificação real
+        
+        if (!isPremium) {
+            binding.adBanner.visibility = View.VISIBLE
+            binding.adBanner.setOnClickListener {
+                // Ação ao clicar no anúncio (ex: abrir upgrade premium)
+                Toast.makeText(context, "Upgrade para Premium e remova anúncios!", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            binding.adBanner.visibility = View.GONE
+        }
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
     }
 }
+

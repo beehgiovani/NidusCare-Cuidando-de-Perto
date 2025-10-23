@@ -10,7 +10,7 @@
         android:id="@+id/imageViewPreview"
         android:layout_width="0dp"
         android:layout_height="200dp"
-        android:layout_margin="16dp"
+        android:layout_margin="@dimen/margin_normal"
         android:background="?attr/colorSurfaceContainerHigh"
         android:scaleType="centerCrop"
         app:layout_constraintEnd_toEndOf="parent"
@@ -22,7 +22,7 @@
         android:id="@+id/fabRetakePhoto"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_margin="8dp"
+        android:layout_margin="@dimen/margin_small"
         app:fabSize="mini"
         app:layout_constraintBottom_toBottomOf="@id/imageViewPreview"
         app:layout_constraintEnd_toEndOf="@id/imageViewPreview"
@@ -40,7 +40,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="@dimen/padding_normal">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -161,7 +161,7 @@
         android:id="@+id/buttonSalvar"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_margin="16dp"
+        android:layout_margin="@dimen/margin_normal"
         android:text="@string/save_medication"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"

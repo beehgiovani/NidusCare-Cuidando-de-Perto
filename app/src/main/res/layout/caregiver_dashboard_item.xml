@@ -10,8 +10,8 @@
     android:clickable="true"
     android:focusable="true"
     android:foreground="?android:attr/selectableItemBackground"
-    app:cardCornerRadius="16dp"
-    app:cardElevation="4dp"
+    app:cardCornerRadius="@dimen/card_corner_radius"
+    app:cardElevation="@dimen/card_elevation"
     app:strokeWidth="1dp"
     tools:transitionName="dependent_card_transition"> <androidx.constraintlayout.widget.ConstraintLayout
     android:layout_width="match_parent"
@@ -30,7 +30,7 @@
         android:id="@+id/mainContentLayout"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:padding="16dp"
+        android:padding="@dimen/padding_normal"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toEndOf="@id/statusBar"
         app:layout_constraintTop_toTopOf="parent">
@@ -269,7 +269,7 @@
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:padding="12dp">
+                android:padding="@dimen/padding_medium">
                 <ImageView
                     android:id="@+id/imageViewInsightIcon"
                     android:layout_width="24dp"

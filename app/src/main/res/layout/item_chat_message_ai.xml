@@ -25,7 +25,7 @@
         android:background="@drawable/chat_bubble_ai"
         android:minHeight="48dp"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:padding="@dimen/padding_medium">
 
         <TextView
             android:id="@+id/textViewMessage"

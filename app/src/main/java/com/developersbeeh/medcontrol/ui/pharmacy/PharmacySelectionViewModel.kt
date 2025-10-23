@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
+import kotlin.math.*
 
 sealed class NavigationEvent {
     data class ToMedicationSelection(val pharmacyDetails: PlaceDetails) : NavigationEvent()
@@ -39,13 +40,16 @@ class PharmacySelectionViewModel @Inject constructor(
     private val _navigationEvent = MutableLiveData<Event<NavigationEvent>>()
     val navigationEvent: LiveData<Event<NavigationEvent>> = _navigationEvent
 
-    // ✅ CORREÇÃO: O LiveData agora emite um Pair com os detalhes E o objeto Place original.
     private val _placeDetailsForOptions = MutableLiveData<Event<UiState<Pair<PlaceDetails, Place>>>>()
     val placeDetailsForOptions: LiveData<Event<UiState<Pair<PlaceDetails, Place>>>> = _placeDetailsForOptions
 
+    // ✅ NOVO: Expor localização do usuário para o adapter
+    private val _userLocation = MutableLiveData<Pair<Double, Double>?>()
+    val userLocation: LiveData<Pair<Double, Double>?> = _userLocation
 
     private var currentRadius = 1000 // Padrão: 1km
     private var currentLocation: android.location.Location? = null
+    private var allPharmacies: List<Place> = emptyList() // ✅ NOVO: Cache de farmácias
 
     fun onPermissionResult(context: Context, granted: Boolean) {
         if (granted) {
@@ -64,13 +68,11 @@ class PharmacySelectionViewModel @Inject constructor(
 
     fun onPharmacySelected(place: Place) {
         viewModelScope.launch {
-            // Reutiliza a mesma lógica de busca de detalhes
             _placeDetailsForOptions.postValue(Event(UiState.Loading))
             val detailsResult = placesRepository.getPlaceDetails(place.placeId)
             detailsResult.onSuccess { details ->
                 if (details.phoneNumber.isNullOrBlank()) {
                     _uiState.postValue(UiState.Error("Esta farmácia não possui um número de telefone cadastrado para contato."))
-                    // Recarrega a lista para remover o estado de loading, caso o usuário tenha clicado no card principal
                     fetchPharmacies()
                 } else {
                     _navigationEvent.postValue(Event(NavigationEvent.ToMedicationSelection(details)))
@@ -86,7 +88,6 @@ class PharmacySelectionViewModel @Inject constructor(
         viewModelScope.launch {
             val detailsResult = placesRepository.getPlaceDetails(place.placeId)
             detailsResult.onSuccess { details ->
-                // ✅ CORREÇÃO: Emite o Pair com os detalhes e o 'place' original.
                 _placeDetailsForOptions.postValue(Event(UiState.Success(Pair(details, place))))
             }.onFailure {
                 _placeDetailsForOptions.postValue(Event(UiState.Error(it.message ?: "Erro desconhecido")))
@@ -112,6 +113,8 @@ class PharmacySelectionViewModel @Inject constructor(
                 }
 
                 if (currentLocation != null) {
+                    // ✅ NOVO: Atualizar localização do usuário
+                    _userLocation.postValue(Pair(currentLocation!!.latitude, currentLocation!!.longitude))
                     fetchPharmacies()
                 } else {
                     _uiState.postValue(UiState.Error("Não foi possível obter sua localização. Verifique se o GPS está ativado e tente novamente."))
@@ -128,10 +131,52 @@ class PharmacySelectionViewModel @Inject constructor(
         viewModelScope.launch {
             val result = placesRepository.findNearbyPharmacies(location.latitude, location.longitude, currentRadius)
             result.onSuccess { response ->
-                _uiState.postValue(UiState.Success(response.results))
+                allPharmacies = response.results
+                
+                // ✅ NOVO: Ordenar farmácias por distância (mais próximas primeiro)
+                val sortedPharmacies = sortPharmaciesByDistance(
+                    allPharmacies,
+                    location.latitude,
+                    location.longitude
+                )
+                
+                _uiState.postValue(UiState.Success(sortedPharmacies))
             }.onFailure {
                 _uiState.postValue(UiState.Error("Erro da API: ${it.message}"))
             }
         }
     }
+
+    /**
+     * ✅ NOVO: Ordena farmácias por distância do usuário
+     */
+    private fun sortPharmaciesByDistance(
+        pharmacies: List<Place>,
+        userLat: Double,
+        userLng: Double
+    ): List<Place> {
+        return pharmacies.sortedBy { place ->
+            calculateDistance(
+                userLat,
+                userLng,
+                place.geometry.location.lat,
+                place.geometry.location.lng
+            )
+        }
+    }
+
+    /**
+     * ✅ NOVO: Calcula distância usando fórmula de Haversine
+     */
+    private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val R = 6371.0 // Raio da Terra em km
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val a = sin(dLat / 2).pow(2) +
+                cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
+                sin(dLon / 2).pow(2)
+        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        return R * c
+    }
 }
+

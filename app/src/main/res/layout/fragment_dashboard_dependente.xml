@@ -123,7 +123,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="16dp">
+                    android:padding="@dimen/padding_normal">
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -164,7 +164,7 @@
                     android:id="@+id/textViewSummary"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:padding="16dp"
+                    android:padding="@dimen/padding_normal"
                     android:textAlignment="center"
                     android:textAppearance="?attr/textAppearanceBody1"
                     android:textColor="?attr/colorOnPrimaryContainer"
@@ -193,7 +193,7 @@
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:padding="16dp">
+                    android:padding="@dimen/padding_normal">
 
                     <TextView
                         android:id="@+id/labelWeightTracker"
@@ -270,7 +270,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="16dp">
+                    android:padding="@dimen/padding_normal">
 
                     <TextView
                         android:layout_width="wrap_content"

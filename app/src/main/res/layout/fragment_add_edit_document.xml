@@ -77,7 +77,7 @@
             android:background="@drawable/dotted_border"
             android:gravity="center"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="@dimen/padding_normal">
 
             <TextView
                 android:id="@+id/textViewFileName"

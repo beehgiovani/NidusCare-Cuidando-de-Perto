@@ -60,16 +60,24 @@ class ActivityLogRepository @Inject constructor(
      * @param tipo O tipo da atividade (enum).
      * @return Um Result indicando sucesso ou falha.
      */
+    /**
+     * Salva um novo log de atividade no Firestore.
+     * @param dependentId O ID do dependente relacionado ao log.
+     * @param descricao A descrição da atividade.
+     * @param tipo O tipo da atividade (enum).
+     * @return Um Result indicando sucesso ou falha.
+     */
     suspend fun saveLog(dependentId: String, descricao: String, tipo: TipoAtividade): Result<Unit> {
         return try {
             val autorNome = userPreferences.getUserName()
             val autorId = auth.currentUser?.uid ?: "user_not_found"
 
             val log = Atividade(
-                descricao = "$autorNome $descricao",
+                // ✅ CORREÇÃO: Descrição limpa, sem o nome do autor
+                descricao = descricao,
                 tipo = tipo,
                 autorId = autorId,
-                autorNome = autorNome
+                autorNome = autorNome // O backend usará este campo
             )
 
             db.collection("dependentes").document(dependentId).collection("atividades").add(log).await()

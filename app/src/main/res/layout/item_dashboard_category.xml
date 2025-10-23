@@ -4,8 +4,8 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    app:cardCornerRadius="16dp"
-    app:cardElevation="2dp"
+    app:cardCornerRadius="@dimen/card_corner_radius"
+    app:cardElevation="@dimen/card_elevation"
     app:cardUseCompatPadding="true">
 
     <LinearLayout
@@ -13,7 +13,7 @@
         android:elevation="@dimen/cardview_compat_inset_shadow"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp"
+        android:padding="@dimen/padding_normal"
         android:gravity="center">
 
         <ImageView
