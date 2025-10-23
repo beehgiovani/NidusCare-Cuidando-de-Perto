@@ -1594,7 +1594,6 @@ exports.handlePlaySubscriptionNotification = onMessagePublished(
     }
 );
 
-
 exports.checkLowStock = onDocumentUpdated({
     document: "dependentes/{dependentId}/medicamentos/{medicamentoId}",
     minInstances: 0
@@ -1887,7 +1886,7 @@ function buildInsightPrompt(dependent, meds, doses, notes, hydration, activities
 
         REGRAS CRÍTICAS: NÃO FAÇA DIAGNÓSTICOS. NÃO DÊ CONSELHOS MÉDICOS. Formate a resposta como um array JSON com objetos contendo "type", "title", e "description" (máximo 30 palavras).
         Tipos de "type" permitidos: "POSITIVE_REINFORCEMENT", "ADHERENCE_ISSUE", "HEALTH_TREND_ALERT", "CORRELATION_INSIGHT".
-        
+
         DADOS PARA ANÁLISE (ÚLTIMOS 7 DIAS):
         - Perfil: Alergias (${dependent.alergias || "N/A"}), Condições (${dependent.condicoesPreexistentes || "N/A"}).
         - Anotações de Saúde: ${notes.length} registros.
@@ -1896,7 +1895,7 @@ function buildInsightPrompt(dependent, meds, doses, notes, hydration, activities
         - Refeições: ${meals.length} registros.
         - Sono: ${sleep.length} registros.
         - Ciclo Menstrual: ${cycleLogs.length} registros diários.
-        
+
         EXEMPLO DE SAÍDA JSON:
         \`\`\`json
         [
@@ -2007,7 +2006,7 @@ exports.sendDailySummary = onSchedule({
                 const dependent = dependentDoc.data();
                 const meds = (await dependentDoc.ref.collection('medicamentos').get()).docs.map(d => d.data());
                 const today = new Date();
-                const activeMeds = meds.filter(m => !m.isUsoEsporadico && !m.isArchived); 
+                const activeMeds = meds.filter(m => !m.isUsoEsporadico && !m.isArchived);
                 const dosesEsperadasHoje = calculateExpectedDosesForPeriod(activeMeds, today, today);
                 if (dosesEsperadasHoje > 0) {
                     summaryBody += `\n• ${dependent.nome}: ${dosesEsperadasHoje} dose(s) agendada(s) hoje.`;
@@ -2104,3 +2103,1051 @@ exports.onDependentDeleted = onDocumentWritten({ document: "dependentes/{depende
 
     logger.info(`[Exclusão] Limpeza de dados para o dependente ${dependentId} concluída.`);
 });
+
+
+// ========================================
+// 🚀 NOVAS FUNCIONALIDADES PREMIUM
+// ========================================
+
+/**
+ * 💰 Função Premium: Análise Financeira de Medicamentos
+ * Calcula gastos totais, médias e projeções
+ */
+exports.calculateMedicationCosts = onCall({ minInstances: 0 }, async (request) => {
+    const userId = request.auth?.uid;
+    if (!userId) {
+        throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+    }
+
+    const { dependentId, startDate, endDate } = request.data;
+    if (!dependentId || !startDate || !endDate) {
+        throw new HttpsError("invalid-argument", "Parâmetros obrigatórios ausentes.");
+    }
+
+    try {
+        const db = admin.firestore();
+        const medicamentosSnapshot = await db
+            .collection("dependentes")
+            .doc(dependentId)
+            .collection("medicamentos")
+            .where("isArchived", "==", false)
+            .get();
+
+        let totalCost = 0;
+        let medicationCosts = [];
+        const start = getUTCDate(startDate);
+        const end = getUTCDate(endDate);
+
+        for (const medDoc of medicamentosSnapshot.docs) {
+            const med = medDoc.data();
+            const expectedDoses = calculateExpectedDosesForMedication(med, start, end);
+
+            // Custo por dose (campo opcional, compatível com data model existente)
+            const costPerDose = med.costPerDose || 0;
+            const medTotalCost = expectedDoses * costPerDose;
+
+            if (costPerDose > 0) {
+                totalCost += medTotalCost;
+                medicationCosts.push({
+                    medicationId: medDoc.id,
+                    medicationName: med.nome,
+                    expectedDoses: expectedDoses,
+                    costPerDose: costPerDose,
+                    totalCost: medTotalCost
+                });
+            }
+        }
+
+        // Calcular dias no período
+        const diffTime = Math.abs(end.getTime() - start.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const avgCostPerDay = diffDays > 0 ? totalCost / diffDays : 0;
+
+        return {
+            success: true,
+            data: {
+                totalCost: totalCost,
+                avgCostPerDay: avgCostPerDay,
+                periodDays: diffDays,
+                medicationBreakdown: medicationCosts,
+                projectedMonthlyCost: avgCostPerDay * 30,
+                projectedYearlyCost: avgCostPerDay * 365
+            }
+        };
+    } catch (error) {
+        logger.error("Erro ao calcular custos de medicamentos:", error);
+        throw new HttpsError("internal", "Erro ao processar cálculo de custos.");
+    }
+});
+
+/**
+ * 🧠 Função Premium: Análise de Interações Medicamentosas
+ * Verifica possíveis interações entre medicamentos ativos
+ */
+exports.analyzeMedicationInteractions = onCall({ minInstances: 0 }, async (request) => {
+    const userId = request.auth?.uid;
+    if (!userId) {
+        throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+    }
+
+    const { dependentId } = request.data;
+    if (!dependentId) {
+        throw new HttpsError("invalid-argument", "dependentId é obrigatório.");
+    }
+
+    try {
+        const db = admin.firestore();
+        const medicamentosSnapshot = await db
+            .collection("dependentes")
+            .doc(dependentId)
+            .collection("medicamentos")
+            .where("isArchived", "==", false)
+            .where("isPaused", "==", false)
+            .get();
+
+        const medications = medicamentosSnapshot.docs.map(doc => ({
+            id: doc.id,
+            nome: doc.data().nome,
+            principioAtivo: doc.data().principioAtivo || null,
+            ...doc.data()
+        }));
+
+        // Base de dados simplificada de interações (pode ser expandida)
+        const knownInteractions = {
+            "warfarina": ["aspirina", "ibuprofeno", "diclofenaco"],
+            "metformina": ["insulina"],
+            "omeprazol": ["clopidogrel"],
+            "fluoxetina": ["tramadol", "amitriptilina"]
+        };
+
+        const interactions = [];
+
+        for (let i = 0; i < medications.length; i++) {
+            for (let j = i + 1; j < medications.length; j++) {
+                const med1 = medications[i];
+                const med2 = medications[j];
+
+                const principio1 = (med1.principioAtivo || med1.nome).toLowerCase();
+                const principio2 = (med2.principioAtivo || med2.nome).toLowerCase();
+
+                // Verificar interações conhecidas
+                if (knownInteractions[principio1]?.includes(principio2) ||
+                    knownInteractions[principio2]?.includes(principio1)) {
+                    interactions.push({
+                        medication1: med1.nome,
+                        medication2: med2.nome,
+                        severity: "MODERATE",
+                        description: `Possível interação entre ${med1.nome} e ${med2.nome}. Consulte seu médico.`,
+                        recommendation: "Monitoramento médico recomendado"
+                    });
+                }
+            }
+        }
+
+        return {
+            success: true,
+            data: {
+                totalMedications: medications.length,
+                interactionsFound: interactions.length,
+                interactions: interactions,
+                analysisDate: new Date().toISOString(),
+                disclaimer: "Esta análise é informativa. Sempre consulte um profissional de saúde."
+            }
+        };
+    } catch (error) {
+        logger.error("Erro ao analisar interações medicamentosas:", error);
+        throw new HttpsError("internal", "Erro ao processar análise de interações.");
+    }
+});
+
+/**
+ * 📊 Função Premium: Previsão de Padrões de Aderência
+ * Usa dados históricos para prever tendências futuras
+ */
+exports.predictAdherencePatterns = onCall({ minInstances: 0 }, async (request) => {
+    const userId = request.auth?.uid;
+    if (!userId) {
+        throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+    }
+
+    const { dependentId, daysToPredict = 30 } = request.data;
+    if (!dependentId) {
+        throw new HttpsError("invalid-argument", "dependentId é obrigatório.");
+    }
+
+    try {
+        const db = admin.firestore();
+
+        // Buscar histórico dos últimos 90 dias
+        const ninetyDaysAgo = new Date();
+        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+        const historicoSnapshot = await db
+            .collection("dependentes")
+            .doc(dependentId)
+            .collection("historico_doses")
+            .where("timestamp", ">=", ninetyDaysAgo.toISOString())
+            .get();
+
+        const medicamentosSnapshot = await db
+            .collection("dependentes")
+            .doc(dependentId)
+            .collection("medicamentos")
+            .where("isArchived", "==", false)
+            .get();
+
+        const meds = medicamentosSnapshot.docs.map(d => d.data());
+
+        // Calcular aderência histórica
+        const historico = historicoSnapshot.docs.map(d => d.data());
+        const dosesTomadas = historico.filter(h => h.status === "TAKEN").length;
+        const dosesPerdidas = historico.filter(h => h.status === "MISSED").length;
+        const totalDoses = dosesTomadas + dosesPerdidas;
+
+        const adherenceRate = totalDoses > 0 ? (dosesTomadas / totalDoses) * 100 : 0;
+
+        // Análise por dia da semana
+        const adherenceByWeekday = {};
+        for (let i = 0; i < 7; i++) {
+            adherenceByWeekday[i] = { taken: 0, missed: 0 };
+        }
+
+        historico.forEach(dose => {
+            const date = new Date(dose.timestamp);
+            const weekday = date.getDay();
+            if (dose.status === "TAKEN") {
+                adherenceByWeekday[weekday].taken++;
+            } else if (dose.status === "MISSED") {
+                adherenceByWeekday[weekday].missed++;
+            }
+        });
+
+        // Calcular previsão
+        const today = new Date();
+        const expectedDosesNext = calculateExpectedDosesForPeriod(
+            meds,
+            today,
+            new Date(today.getTime() + daysToPredict * 24 * 60 * 60 * 1000)
+        );
+
+        const predictedTaken = Math.round(expectedDosesNext * (adherenceRate / 100));
+        const predictedMissed = expectedDosesNext - predictedTaken;
+
+        return {
+            success: true,
+            data: {
+                historicalAdherence: {
+                    rate: adherenceRate,
+                    totalDoses: totalDoses,
+                    taken: dosesTomadas,
+                    missed: dosesPerdidas,
+                    periodDays: 90
+                },
+                adherenceByWeekday: Object.keys(adherenceByWeekday).map(day => ({
+                    weekday: parseInt(day),
+                    weekdayName: ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"][day],
+                    taken: adherenceByWeekday[day].taken,
+                    missed: adherenceByWeekday[day].missed,
+                    rate: adherenceByWeekday[day].taken + adherenceByWeekday[day].missed > 0
+                        ? (adherenceByWeekday[day].taken / (adherenceByWeekday[day].taken + adherenceByWeekday[day].missed)) * 100
+                        : 0
+                })),
+                prediction: {
+                    daysAhead: daysToPredict,
+                    expectedDoses: expectedDosesNext,
+                    predictedTaken: predictedTaken,
+                    predictedMissed: predictedMissed,
+                    predictedRate: adherenceRate
+                },
+                insights: generateAdherenceInsights(adherenceRate, adherenceByWeekday),
+                analysisDate: new Date().toISOString()
+            }
+        };
+    } catch (error) {
+        logger.error("Erro ao prever padrões de aderência:", error);
+        throw new HttpsError("internal", "Erro ao processar previsão de aderência.");
+    }
+});
+
+/**
+ * Gera insights baseados na aderência
+ */
+function generateAdherenceInsights(adherenceRate, adherenceByWeekday) {
+    const insights = [];
+
+    if (adherenceRate >= 90) {
+        insights.push({
+            type: "SUCCESS",
+            message: "Excelente aderência! Continue assim!",
+            icon: "✅"
+        });
+    } else if (adherenceRate >= 70) {
+        insights.push({
+            type: "WARNING",
+            message: "Boa aderência, mas há espaço para melhorias.",
+            icon: "⚠️"
+        });
+    } else {
+        insights.push({
+            type: "ALERT",
+            message: "Aderência baixa. Considere ajustar lembretes ou consultar seu médico.",
+            icon: "🚨"
+        });
+    }
+
+    // Identificar dia da semana com menor aderência
+    let worstDay = null;
+    let worstRate = 100;
+
+    Object.keys(adherenceByWeekday).forEach(day => {
+        const data = adherenceByWeekday[day];
+        const total = data.taken + data.missed;
+        if (total > 0) {
+            const rate = (data.taken / total) * 100;
+            if (rate < worstRate) {
+                worstRate = rate;
+                worstDay = parseInt(day);
+            }
+        }
+    });
+
+    if (worstDay !== null && worstRate < 70) {
+        const dayNames = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+        insights.push({
+            type: "TIP",
+            message: `${dayNames[worstDay]} é o dia com menor aderência. Configure lembretes extras!`,
+            icon: "💡"
+        });
+    }
+
+    return insights;
+}
+
+/**
+ * 📧 Função Premium: Envio Automático de Relatórios Agendados
+ * Gera e envia relatórios por email periodicamente
+ */
+exports.sendScheduledReport = onCall({ minInstances: 0 }, async (request) => {
+    const userId = request.auth?.uid;
+    if (!userId) {
+        throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+    }
+
+    const { dependentId, email, reportType = "SIMPLE" } = request.data;
+    if (!dependentId || !email) {
+        throw new HttpsError("invalid-argument", "dependentId e email são obrigatórios.");
+    }
+
+    try {
+        // Salvar configuração de relatório agendado
+        const db = admin.firestore();
+        const scheduleRef = await db.collection("scheduled_reports").add({
+            userId: userId,
+            dependentId: dependentId,
+            email: email,
+            reportType: reportType,
+            frequency: "WEEKLY", // Pode ser DAILY, WEEKLY, MONTHLY
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            isActive: true,
+            lastSent: null
+        });
+
+        return {
+            success: true,
+            message: "Relatório agendado com sucesso!",
+            scheduleId: scheduleRef.id
+        };
+    } catch (error) {
+        logger.error("Erro ao agendar relatório:", error);
+        throw new HttpsError("internal", "Erro ao processar agendamento.");
+    }
+});
+
+/**
+ * 🗺️ Função Premium: Calcular Distância para Farmácias
+ * Calcula distância real entre usuário e farmácias
+ */
+exports.calculatePharmacyDistances = onCall({ minInstances: 0 }, async (request) => {
+    const userId = request.auth?.uid;
+    if (!userId) {
+        throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+    }
+
+    const { userLat, userLng, pharmacies } = request.data;
+    if (!userLat || !userLng || !pharmacies || !Array.isArray(pharmacies)) {
+        throw new HttpsError("invalid-argument", "Parâmetros inválidos.");
+    }
+
+    try {
+        // Função para calcular distância usando fórmula de Haversine
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Raio da Terra em km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a =
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c; // Distância em km
+        }
+
+        const pharmaciesWithDistance = pharmacies.map(pharmacy => {
+            const distance = calculateDistance(
+                userLat,
+                userLng,
+                pharmacy.lat,
+                pharmacy.lng
+            );
+
+            return {
+                ...pharmacy,
+                distanceKm: Math.round(distance * 100) / 100,
+                distanceMeters: Math.round(distance * 1000),
+                distanceText: distance < 1
+                    ? `${Math.round(distance * 1000)} m`
+                    : `${Math.round(distance * 10) / 10} km`
+            };
+        });
+
+        // Ordenar por distância
+        pharmaciesWithDistance.sort((a, b) => a.distanceKm - b.distanceKm);
+
+        return {
+            success: true,
+            data: pharmaciesWithDistance
+        };
+    } catch (error) {
+        logger.error("Erro ao calcular distâncias:", error);
+        throw new HttpsError("internal", "Erro ao processar cálculo de distâncias.");
+    }
+});
+
+/**
+ * ⭐ Função Premium: Salvar Farmácia Favorita
+ * Permite usuários salvarem farmácias favoritas
+ */
+exports.saveFavoritePharmacy = onCall({ minInstances: 0 }, async (request) => {
+    const userId = request.auth?.uid;
+    if (!userId) {
+        throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+    }
+
+    const { pharmacyId, pharmacyName, pharmacyAddress, pharmacyPhone } = request.data;
+    if (!pharmacyId || !pharmacyName) {
+        throw new HttpsError("invalid-argument", "Dados da farmácia incompletos.");
+    }
+
+    try {
+        const db = admin.firestore();
+        await db.collection("users").doc(userId).collection("favorite_pharmacies").doc(pharmacyId).set({
+            pharmacyId: pharmacyId,
+            name: pharmacyName,
+            address: pharmacyAddress || null,
+            phone: pharmacyPhone || null,
+            savedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        return {
+            success: true,
+            message: "Farmácia adicionada aos favoritos!"
+        };
+    } catch (error) {
+        logger.error("Erro ao salvar farmácia favorita:", error);
+        throw new HttpsError("internal", "Erro ao salvar favorito.");
+    }
+});
+
+/**
+ * 📊 Função Premium: Relatório Comparativo entre Dependentes
+ * Compara métricas de saúde entre múltiplos dependentes
+ */
+exports.generateComparativeReport = onCall({ minInstances: 0 }, async (request) => {
+    const userId = request.auth?.uid;
+    if (!userId) {
+        throw new HttpsError("unauthenticated", "Usuário não autenticado.");
+    }
+
+    const { dependentIds, startDate, endDate } = request.data;
+    if (!dependentIds || !Array.isArray(dependentIds) || dependentIds.length < 2) {
+        throw new HttpsError("invalid-argument", "Pelo menos 2 dependentes são necessários para comparação.");
+    }
+
+    try {
+        const db = admin.firestore();
+        const comparisons = [];
+
+        for (const depId of dependentIds) {
+            const dependentDoc = await db.collection("dependentes").doc(depId).get();
+            if (!dependentDoc.exists) continue;
+
+            const dependent = dependentDoc.data();
+            const medicamentosSnapshot = await dependentDoc.ref.collection("medicamentos")
+                .where("isArchived", "==", false).get();
+
+            const meds = medicamentosSnapshot.docs.map(d => d.data());
+            const start = getUTCDate(startDate);
+            const end = getUTCDate(endDate);
+
+            const expectedDoses = calculateExpectedDosesForPeriod(meds, start, end);
+
+            // Buscar doses tomadas no período
+            const historicoSnapshot = await dependentDoc.ref.collection("historico_doses")
+                .where("timestamp", ">=", startDate)
+                .where("timestamp", "<=", endDate)
+                .get();
+
+            const takenDoses = historicoSnapshot.docs.filter(d => d.data().status === "TAKEN").length;
+            const adherenceRate = expectedDoses > 0 ? (takenDoses / expectedDoses) * 100 : 0;
+
+            comparisons.push({
+                dependentId: depId,
+                dependentName: dependent.nome,
+                age: calculateAgeFromDobString(dependent.dataNascimento),
+                totalMedications: meds.length,
+                expectedDoses: expectedDoses,
+                takenDoses: takenDoses,
+                adherenceRate: Math.round(adherenceRate * 10) / 10
+            });
+        }
+
+        // Ordenar por aderência
+        comparisons.sort((a, b) => b.adherenceRate - a.adherenceRate);
+
+        return {
+            success: true,
+            data: {
+                comparisons: comparisons,
+                period: {
+                    startDate: startDate,
+                    endDate: endDate
+                },
+                summary: {
+                    bestAdherence: comparisons[0],
+                    worstAdherence: comparisons[comparisons.length - 1],
+                    averageAdherence: comparisons.reduce((sum, c) => sum + c.adherenceRate, 0) / comparisons.length
+                }
+            }
+        };
+    } catch (error) {
+        logger.error("Erro ao gerar relatório comparativo:", error);
+        throw new HttpsError("internal", "Erro ao processar relatório comparativo.");
+    }
+});
+
+logger.info("✅ Novas funcionalidades premium carregadas com sucesso!");
+
+
+
+
+// ========================================
+// ✅ NOVAS FUNÇÕES PREMIUM - DIÁRIO DO BEM-ESTAR
+// ========================================
+
+/**
+ * Analisa padrões de humor ao longo do tempo
+ */
+exports.analyzeMoodPatterns = onCall({ cors: true }, async (request) => {
+    const { dependentId, startDate, endDate, period = "30days" } = request.data;
+    const userId = request.auth?.uid;
+
+    if (!userId) {
+        throw new HttpsError("unauthenticated", "Usuário não autenticado");
+    }
+
+    if (!dependentId) {
+        throw new HttpsError("invalid-argument", "dependentId é obrigatório");
+    }
+
+    try {
+        const db = admin.firestore();
+
+        // Verificar se é premium
+        const userDoc = await db.collection("users").doc(userId).get();
+        const isPremium = userDoc.data()?.premium || false;
+
+        if (!isPremium) {
+            throw new HttpsError("permission-denied", "Recurso disponível apenas para usuários premium");
+        }
+
+        // Buscar registros de humor
+        const start = new Date(startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+        const end = new Date(endDate || new Date());
+
+        const moodSnapshot = await db.collection("dependentes")
+            .doc(dependentId)
+            .collection("daily_cycle_logs")
+            .where("dateString", ">=", start.toISOString().split('T')[0])
+            .where("dateString", "<=", end.toISOString().split('T')[0])
+            .get();
+
+        const moodData = [];
+        moodSnapshot.forEach(doc => {
+            const data = doc.data();
+            if (data.humor) {
+                moodData.push({
+                    date: data.dateString,
+                    mood: data.humor,
+                    moodScore: getMoodScore(data.humor)
+                });
+            }
+        });
+
+        if (moodData.length === 0) {
+            return {
+                success: true,
+                data: {
+                    period,
+                    averageMood: 0,
+                    moodTrend: "STABLE",
+                    dominantMood: "Nenhum",
+                    moodDistribution: {},
+                    insights: [{
+                        type: "INFO",
+                        title: "Sem dados suficientes",
+                        description: "Registre seu humor diariamente para obter análises detalhadas"
+                    }],
+                    correlations: []
+                }
+            };
+        }
+
+        // Calcular estatísticas
+        const moodScores = moodData.map(m => m.moodScore);
+        const averageMood = moodScores.reduce((a, b) => a + b, 0) / moodScores.length;
+
+        // Distribuição de humor
+        const moodDistribution = {};
+        moodData.forEach(m => {
+            moodDistribution[m.mood] = (moodDistribution[m.mood] || 0) + 1;
+        });
+
+        // Humor dominante
+        const dominantMood = Object.entries(moodDistribution)
+            .sort((a, b) => b[1] - a[1])[0][0];
+
+        // Tendência
+        const firstHalf = moodScores.slice(0, Math.floor(moodScores.length / 2));
+        const secondHalf = moodScores.slice(Math.floor(moodScores.length / 2));
+        const avgFirstHalf = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;
+        const avgSecondHalf = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length;
+
+        let moodTrend = "STABLE";
+        if (avgSecondHalf > avgFirstHalf + 0.5) moodTrend = "IMPROVING";
+        else if (avgSecondHalf < avgFirstHalf - 0.5) moodTrend = "DECLINING";
+
+        // Insights
+        const insights = [];
+
+        if (averageMood >= 4) {
+            insights.push({
+                type: "SUCCESS",
+                title: "Humor Excelente!",
+                description: `Seu humor médio está ótimo (${averageMood.toFixed(1)}/5). Continue assim!`,
+                recommendation: "Mantenha suas rotinas positivas"
+            });
+        } else if (averageMood < 2.5) {
+            insights.push({
+                type: "WARNING",
+                title: "Atenção ao Humor",
+                description: `Seu humor médio está baixo (${averageMood.toFixed(1)}/5).`,
+                recommendation: "Considere conversar com um profissional de saúde"
+            });
+        }
+
+        if (moodTrend === "IMPROVING") {
+            insights.push({
+                type: "SUCCESS",
+                title: "Tendência Positiva",
+                description: "Seu humor tem melhorado ao longo do tempo!",
+                recommendation: "Identifique o que está funcionando e continue"
+            });
+        } else if (moodTrend === "DECLINING") {
+            insights.push({
+                type: "WARNING",
+                title: "Tendência de Declínio",
+                description: "Seu humor tem piorado recentemente.",
+                recommendation: "Avalie possíveis causas e busque apoio se necessário"
+            });
+        }
+
+        return {
+            success: true,
+            data: {
+                period,
+                averageMood: parseFloat(averageMood.toFixed(2)),
+                moodTrend,
+                dominantMood,
+                moodDistribution,
+                insights,
+                correlations: []
+            }
+        };
+
+    } catch (error) {
+        logger.error("Erro ao analisar padrões de humor:", error);
+        throw new HttpsError("internal", "Erro ao analisar padrões de humor");
+    }
+});
+
+function getMoodScore(mood) {
+    const moodScores = {
+        "Feliz": 5,
+        "Animada": 5,
+        "Bem": 4,
+        "Normal": 3,
+        "Cansada": 2,
+        "Irritada": 2,
+        "Triste": 1,
+        "Ansiosa": 2
+    };
+    return moodScores[mood] || 3;
+}
+
+/**
+ * Analisa padrões de sono
+ */
+exports.analyzeSleepPatterns = onCall({ cors: true }, async (request) => {
+    const { dependentId, startDate, endDate } = request.data;
+    const userId = request.auth?.uid;
+
+    if (!userId || !dependentId) {
+        throw new HttpsError("invalid-argument", "Parâmetros inválidos");
+    }
+
+    try {
+        const db = admin.firestore();
+
+        const userDoc = await db.collection("users").doc(userId).get();
+        const isPremium = userDoc.data()?.premium || false;
+
+        if (!isPremium) {
+            throw new HttpsError("permission-denied", "Recurso premium");
+        }
+
+        const start = new Date(startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+        const end = new Date(endDate || new Date());
+
+        const sleepSnapshot = await db.collection("dependentes")
+            .doc(dependentId)
+            .collection("sono_registros")
+            .where("data", ">=", start.toISOString().split('T')[0])
+            .where("data", "<=", end.toISOString().split('T')[0])
+            .get();
+
+        const sleepData = [];
+        sleepSnapshot.forEach(doc => {
+            const data = doc.data();
+            sleepData.push({
+                date: data.data,
+                hours: data.horasDormidas || 0,
+                quality: getQualityScore(data.qualidade)
+            });
+        });
+
+        if (sleepData.length === 0) {
+            return {
+                success: true,
+                data: {
+                    averageHours: 0,
+                    averageQuality: 0,
+                    sleepTrend: "STABLE",
+                    insights: [{
+                        type: "info",
+                        message: "Registre seu sono para obter análises",
+                        severity: "info"
+                    }],
+                    recommendations: ["Comece a registrar seu sono diariamente"]
+                }
+            };
+        }
+
+        const averageHours = sleepData.reduce((sum, s) => sum + s.hours, 0) / sleepData.length;
+        const averageQuality = sleepData.reduce((sum, s) => sum + s.quality, 0) / sleepData.length;
+
+        // Tendência
+        const firstHalf = sleepData.slice(0, Math.floor(sleepData.length / 2));
+        const secondHalf = sleepData.slice(Math.floor(sleepData.length / 2));
+        const avgFirst = firstHalf.reduce((sum, s) => sum + s.quality, 0) / firstHalf.length;
+        const avgSecond = secondHalf.reduce((sum, s) => sum + s.quality, 0) / secondHalf.length;
+
+        let sleepTrend = "STABLE";
+        if (avgSecond > avgFirst + 0.5) sleepTrend = "IMPROVING";
+        else if (avgSecond < avgFirst - 0.5) sleepTrend = "WORSENING";
+
+        // Melhor e pior dia
+        const sortedByQuality = [...sleepData].sort((a, b) => b.quality - a.quality);
+        const bestSleepDay = sortedByQuality[0]?.date;
+        const worstSleepDay = sortedByQuality[sortedByQuality.length - 1]?.date;
+
+        // Insights
+        const insights = [];
+        const recommendations = [];
+
+        if (averageHours < 6) {
+            insights.push({
+                type: "warning",
+                message: `Você está dormindo em média ${averageHours.toFixed(1)}h por noite`,
+                severity: "warning"
+            });
+            recommendations.push("Tente dormir pelo menos 7-8 horas por noite");
+        } else if (averageHours >= 7 && averageHours <= 9) {
+            insights.push({
+                type: "success",
+                message: "Sua duração de sono está ideal!",
+                severity: "info"
+            });
+        }
+
+        if (averageQuality < 2.5) {
+            insights.push({
+                type: "warning",
+                message: "A qualidade do seu sono está baixa",
+                severity: "warning"
+            });
+            recommendations.push("Evite telas 1h antes de dormir");
+            recommendations.push("Mantenha o quarto escuro e silencioso");
+        }
+
+        return {
+            success: true,
+            data: {
+                averageHours: parseFloat(averageHours.toFixed(1)),
+                averageQuality: parseFloat(averageQuality.toFixed(1)),
+                sleepTrend,
+                bestSleepDay,
+                worstSleepDay,
+                insights,
+                recommendations
+            }
+        };
+
+    } catch (error) {
+        logger.error("Erro ao analisar sono:", error);
+        throw new HttpsError("internal", "Erro ao analisar sono");
+    }
+});
+
+function getQualityScore(quality) {
+    const scores = {
+        "EXCELENTE": 5,
+        "BOA": 4,
+        "REGULAR": 3,
+        "RUIM": 2,
+        "PESSIMA": 1
+    };
+    return scores[quality] || 3;
+}
+
+/**
+ * Gera relatório completo de bem-estar
+ */
+exports.generateWellbeingReport = onCall({ cors: true }, async (request) => {
+    const { dependentId, startDate, endDate } = request.data;
+    const userId = request.auth?.uid;
+
+    if (!userId || !dependentId) {
+        throw new HttpsError("invalid-argument", "Parâmetros inválidos");
+    }
+
+    try {
+        const db = admin.firestore();
+
+        const userDoc = await db.collection("users").doc(userId).get();
+        const isPremium = userDoc.data()?.premium || false;
+
+        if (!isPremium) {
+            throw new HttpsError("permission-denied", "Recurso premium");
+        }
+
+        const dependentDoc = await db.collection("dependentes").doc(dependentId).get();
+        const dependentName = dependentDoc.data()?.nome || "Dependente";
+
+        // Chamar outras funções de análise
+        const moodAnalysis = await exports.analyzeMoodPatterns.run({
+            data: { dependentId, startDate, endDate },
+            auth: { uid: userId }
+        });
+
+        const sleepAnalysis = await exports.analyzeSleepPatterns.run({
+            data: { dependentId, startDate, endDate },
+            auth: { uid: userId }
+        });
+
+        const start = new Date(startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+        const end = new Date(endDate || new Date());
+
+        // Calcular score geral
+        const moodScore = moodAnalysis.data.averageMood || 0;
+        const sleepScore = sleepAnalysis.data.averageQuality || 0;
+        const overallScore = ((moodScore + sleepScore) / 2) * 2; // 0-10
+
+        // Insights gerais
+        const generalInsights = [];
+
+        if (overallScore >= 8) {
+            generalInsights.push({
+                category: "Geral",
+                title: "Excelente Bem-Estar!",
+                description: "Você está mantendo um ótimo equilíbrio em sua saúde e bem-estar",
+                priority: "LOW"
+            });
+        } else if (overallScore < 5) {
+            generalInsights.push({
+                category: "Geral",
+                title: "Atenção Necessária",
+                description: "Alguns aspectos do seu bem-estar precisam de atenção",
+                priority: "HIGH"
+            });
+        }
+
+        // Plano de ação
+        const actionPlan = [];
+
+        if (moodScore < 3) {
+            actionPlan.push({
+                title: "Melhorar Humor",
+                description: "Pratique atividades que trazem alegria",
+                category: "Humor",
+                priority: 1,
+                estimatedImpact: "high"
+            });
+        }
+
+        if (sleepScore < 3) {
+            actionPlan.push({
+                title: "Melhorar Qualidade do Sono",
+                description: "Estabeleça uma rotina de sono consistente",
+                category: "Sono",
+                priority: 1,
+                estimatedImpact: "high"
+            });
+        }
+
+        return {
+            success: true,
+            data: {
+                dependentId,
+                dependentName,
+                period: "30days",
+                startDate: start.toISOString().split('T')[0],
+                endDate: end.toISOString().split('T')[0],
+                overallScore: parseFloat(overallScore.toFixed(1)),
+                moodAnalysis: moodAnalysis.data,
+                sleepAnalysis: sleepAnalysis.data,
+                generalInsights,
+                actionPlan,
+                generatedAt: new Date().toISOString()
+            }
+        };
+
+    } catch (error) {
+        logger.error("Erro ao gerar relatório de bem-estar:", error);
+        throw new HttpsError("internal", "Erro ao gerar relatório");
+    }
+});
+
+/**
+ * Cria ou atualiza objetivo de bem-estar
+ */
+exports.saveWellbeingGoal = onCall({ cors: true }, async (request) => {
+    const { goalId, dependentId, type, title, description, targetValue, unit, frequency, startDate, endDate } = request.data;
+    const userId = request.auth?.uid;
+
+    if (!userId || !dependentId) {
+        throw new HttpsError("invalid-argument", "Parâmetros inválidos");
+    }
+
+    try {
+        const db = admin.firestore();
+
+        const userDoc = await db.collection("users").doc(userId).get();
+        const isPremium = userDoc.data()?.premium || false;
+
+        if (!isPremium) {
+            throw new HttpsError("permission-denied", "Recurso premium");
+        }
+
+        const goalData = {
+            userId,
+            dependentId,
+            type,
+            title,
+            description,
+            targetValue,
+            unit,
+            frequency,
+            startDate,
+            endDate: endDate || null,
+            isActive: true,
+            currentValue: 0,
+            progress: 0,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+
+        let savedGoalId;
+
+        if (goalId) {
+            // Atualizar objetivo existente
+            await db.collection("wellbeing_goals").doc(goalId).update(goalData);
+            savedGoalId = goalId;
+        } else {
+            // Criar novo objetivo
+            goalData.createdAt = admin.firestore.FieldValue.serverTimestamp();
+            const docRef = await db.collection("wellbeing_goals").add(goalData);
+            savedGoalId = docRef.id;
+        }
+
+        return {
+            success: true,
+            goalId: savedGoalId,
+            message: "Objetivo salvo com sucesso"
+        };
+
+    } catch (error) {
+        logger.error("Erro ao salvar objetivo:", error);
+        throw new HttpsError("internal", "Erro ao salvar objetivo");
+    }
+});
+
+/**
+ * Busca objetivos de bem-estar
+ */
+exports.getWellbeingGoals = onCall({ cors: true }, async (request) => {
+    const { dependentId } = request.data;
+    const userId = request.auth?.uid;
+
+    if (!userId || !dependentId) {
+        throw new HttpsError("invalid-argument", "Parâmetros inválidos");
+    }
+
+    try {
+        const db = admin.firestore();
+
+        const goalsSnapshot = await db.collection("wellbeing_goals")
+            .where("userId", "==", userId)
+            .where("dependentId", "==", dependentId)
+            .where("isActive", "==", true)
+            .get();
+
+        const goals = [];
+        goalsSnapshot.forEach(doc => {
+            goals.push({
+                goalId: doc.id,
+                ...doc.data()
+            });
+        });
+
+        return {
+            success: true,
+            goals
+        };
+
+    } catch (error) {
+        logger.error("Erro ao buscar objetivos:", error);
+        throw new HttpsError("internal", "Erro ao buscar objetivos");
+    }
+});
+
+logger.log("✅ Novas funcionalidades premium de bem-estar carregadas com sucesso!");
+
